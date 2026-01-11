@@ -1,0 +1,498 @@
+body {
+    margin: 0;
+    padding: 0;
+}
+html, body, #map{
+    width: 100%;
+    height: 100%;
+}
+/* 中央に十字マークを配置 */
+.crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin-top: -10px;
+    margin-left: -10px;
+    background-image: url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><line x1="0" y1="50" x2="100" y2="50" stroke="white" stroke-width="20"/><line x1="50" y1="0" x2="50" y2="100" stroke="white" stroke-width="20"/><line x1="0" y1="50" x2="100" y2="50" stroke="blue" stroke-width="10"/><line x1="50" y1="0" x2="50" y2="100" stroke="blue" stroke-width="10"/></svg>');
+    pointer-events: none;
+    z-index: 1000;
+}
+
+/* 現在地移動ボタンのコンテナスタイル */
+#currentLocationControl {
+    position: absolute;
+    top: 150px; /* 既存の座標表示エリアやボタン行の上になるように調整 */
+    right: 15px;
+    z-index: 999;
+    width: 40px;
+    height: 40px;
+    line-height: 40px; /* アイコンを垂直方向に中央寄せ */
+    text-align: center;
+    background-color: #fff;
+    border-radius: 4px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+    cursor: pointer;
+    font-size: 18px;
+    color: #333;
+    transition: background-color 0.3s;
+}
+
+#currentLocationControl:hover {
+    background-color: #f4f4f4;
+}
+
+/* アイコンの色を設定 */
+#currentLocationControl .fa-location-arrow {
+    color: #007bff; /* 青色 */
+}
+
+/* 測位中は現在地移動ボタンのアイコン内の矢印を点滅させる */
+@keyframes blink {
+    0% { color: #007bff; opacity: 1; } /* 濃い青で完全に表示 */
+    50% { color: #00FFFF; opacity: 0.3; } /* 明るい水色で薄くする */
+    100% { color: #007bff; opacity: 1; }
+}
+
+/* 測位中のボタンに適用するスタイル */
+#currentLocationControl.locating {
+    background-color: #f0f8ff; /* 測位中は背景を薄い水色にする */
+}
+
+/* アイコンに点滅アニメーションを適用 */
+#currentLocationControl.locating .fa-location-arrow {
+    animation: blink 1.5s ease-in-out infinite; /* 1.5秒で滑らかに点滅を繰り返す */
+}
+
+/* leaflet.offline */
+/* 保存タイルコントロールの位置を右端中央に */
+.leaflet-control-savetiles {
+  position: absolute !important;
+  right: 100px;          /* 右端からの距離 */
+  top: 50%;             /* 画面中央に配置 */
+  transform: translateY(-50%); /* 縦方向中央寄せ */
+  z-index: 1000;        /* 他のアイコンより前面に */
+}
+
+/* ボタンの見た目を調整 */
+.leaflet-control-savetiles a {
+  font-size: 20px;      /* アイコンを大きめに */
+  line-height: 30px;
+  text-align: center;
+}
+
+.label {
+    font-size: 15px;
+    text-align: center;
+    font-weight: bold;
+    text-shadow: 
+    -1px -1px 0 white, /* 左上 */
+    1px -1px 0 white, /* 右上 */
+    -1px 1px 0 white, /* 左下 */
+    1px 1px 0 white;  /* 右下 */
+}
+
+.makerPoint {
+    width: 1px;
+    height: 1px;
+    border-radius: 10px;
+    border: 1px solid #fdfdfd;
+    background-color: rgb(70, 70, 70);
+}
+
+.labelPoint {
+    white-space: nowrap; /* 横書きで改行を防ぐ */
+    font-size: 15px;
+    text-align: right;
+    font-weight: bold;
+    padding: 10px;
+    z-index: 1000;
+    position: absolute;
+    text-shadow: 
+    -1px -1px 0 white, /* 左上 */
+    1px -1px 0 white, /* 右上 */
+    -1px 1px 0 white, /* 左下 */
+    1px 1px 0 white;  /* 右下 */
+}
+
+/* ツールチップのデフォルトスタイルを上書き */
+.leaflet-tooltip.my-label-tooltip {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    font-weight: bold;
+    color: #333;
+    padding: 0; /* 余計なパディングを削除 */
+    text-shadow: 
+    -1px -1px 0 white, /* 左上 */
+    1px -1px 0 white, /* 右上 */
+    -1px 1px 0 white, /* 左下 */
+    1px 1px 0 white;  /* 右下 */
+}
+
+
+/* スライドメニュー */
+.menu {
+    position: fixed;
+    top: 0;
+    left: -300px;
+    width: 300px;
+    height: 100vh;
+    background-color: transparent;
+    color: darkslategray;
+    padding: 20px;
+    transition: transform 0.3s;
+    z-index: 1200;
+
+    overflow-y: auto;        
+    overflow-x: hidden;
+    box-sizing: border-box;
+}
+.menu.open {
+    transform: translateX(300px);
+    background-color: rgba(255,255,255,0.75); /*透過率25% */
+    z-index: 1200;
+}
+
+.menu p:last-child {
+    margin-bottom: 40px;
+}
+
+/* スクロールバーのデザインを少し細くしてスッキリさせる */
+.menu::-webkit-scrollbar {
+    width: 6px;
+}
+.menu::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+}
+
+/* 見出しをクリック可能にする */
+.menu h2 {
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 5px;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+    margin-bottom: 5px;
+}
+
+/* 矢印アイコンの向き */
+.menu h2::after {
+    content: '▶';
+    font-size: 0.8em;
+    transition: transform 0.3s;
+}
+
+.menu h2.active::after {
+    transform: rotate(90deg); /* 開いている時は下向き */
+}
+
+/* 中身の初期状態を非表示にする */
+.accordion-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out;
+    padding-left: 10px;
+}
+
+/* 開いた時の状態 */
+.accordion-content.show {
+    max-height: 500px; /* 十分な高さを設定 */
+    margin-bottom: 15px;
+}
+
+.toggleBtn {
+    position: fixed;
+    top: 50%;
+    left: 10px;
+    width : 20px;
+    height: 20px;
+
+    display: flex; /* Flexbox レイアウトを使用 */
+    align-items: center; /* 垂直方向の中央揃え */
+    justify-content: center; /* 水平方向の中央揃え */
+    
+    background-color: darkgreen;
+    color: white;
+    border: 1px solid gray;
+    padding: 10px;
+    cursor: pointer;
+    z-index: 1000;
+}
+.closeBtn {
+    position: relative;
+    top: 10px;
+    right: auto;
+    font-size: 24px;
+    cursor: pointer;
+    color: darkslategray;
+}
+.menuBtn {
+    background-color: lavender; /* 背景色を白色に設定 */
+    color: darkslategray;
+    padding: 10px 10px;
+    border: 1px;
+    border-radius: 5px; /* 角を丸くする */
+    font-size: 15px;
+    cursor: pointer;
+}
+
+/* ---ラベル選択--- */
+
+
+.label-select {
+  width: 50%;
+  max-width: 320px;
+  padding: 10px 1px;
+  font-size: 14px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(175, 219, 255, 0.5);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  appearance: none;
+  text-align: center;
+  margin: 0 auto 20px auto;
+
+}
+
+
+
+/* ---配置--- */
+#bottom-container {
+  position: fixed;
+  bottom: 35px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+  z-index: 1000;
+}
+
+#button-row {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+#coordinate-text {
+  color: rgb(0, 0, 0);
+  background-color: rgba(255,255,255, 0.5);
+  font-size: 12px;
+  text-shadow: 
+    -1px -1px 0 white, /* 左上 */
+    1px -1px 0 white, /* 右上 */
+    -1px 1px 0 white, /* 左下 */
+    1px 1px 0 white;  /* 右下 */
+  padding: 5px 10px;
+  border-radius: 5px;
+  align-self: flex-start;
+}
+
+button {
+    /* transform: translateX(-50%); */
+    padding: 10px 20px;
+    background-color: red;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    text-align: center;
+    z-index: 100;
+}
+
+
+/* バルーンのスタイル */
+.popup-content {
+    font-size: 15px; /* 文字サイズを大きく設定 */
+}
+
+/* バルーン内の編集・削除ボタン用のスタイル */
+.edit-button {
+    padding: 10px 20px;
+    font-size: 14px;
+    border-radius: 5px;
+    background-color: #28a745; /* 編集ボタンの色 (緑) */
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+.delete-button {
+    padding: 10px 20px;
+    font-size: 14px;
+    border-radius: 5px;
+    background-color: #dc3545; /* 削除ボタンの色 (赤) */
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+/* PWAバナーのスタイル */
+.pwa-banner {
+    position: fixed;
+    top: 10px; /* 上から出す場合（下なら bottom: 0） */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 95%;
+    max-width: 450px;
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    border-radius: 12px;
+    z-index: 9999;
+    padding: 10px 15px;
+    backdrop-filter: blur(5px);
+}
+
+.pwa-banner-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.pwa-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+}
+
+.pwa-text {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.pwa-text strong {
+    font-size: 14px;
+}
+
+.pwa-text span {
+    font-size: 11px;
+    color: #666;
+}
+
+.pwa-btn {
+    background-color: #007AFF; /* iOS/Safari風の青 */
+    color: white;
+    border: none;
+    padding: 6px 15px;
+    border-radius: 20px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.pwa-close {
+    font-size: 20px;
+    color: #999;
+    padding-left: 5px;
+    cursor: pointer;
+}
+
+/* iOS用のPWA誘導バナー */
+.ios-prompt {
+    position: fixed;
+    bottom: 30px; /* iPhoneの共有ボタン付近を指すように調整 */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 350px;
+    z-index: 10000;
+    animation: fadeInUp 0.5s ease-out;
+}
+
+.ios-prompt-content {
+    background: rgba(255, 255, 255, 0.95);
+    padding: 15px;
+    border-radius: 15px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+    backdrop-filter: blur(10px);
+    position: relative;
+    border: 1px solid #ddd;
+}
+
+.ios-prompt-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.ios-prompt p {
+    font-size: 14px;
+    color: #333;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.ios-close {
+    font-size: 20px;
+    color: #999;
+    cursor: pointer;
+}
+
+/* 下向きの矢印（共有ボタンを指す） */
+.ios-prompt-arrow {
+    position: absolute;
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-top: 10px solid rgba(255, 255, 255, 0.95);
+}
+
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translate(-50%, 20px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+
+/* スマートフォン用のスタイルを追加 */
+@media (max-width: 1200px) {
+    .leaflet-control-layers a,
+    .leaflet-bar a {
+    font-size: 20px;
+    padding: 8px;
+    }
+    
+    .leaflet-control-scale-line {
+    font-size: 14px;
+    }
+
+    .leaflet-control-layers .leaflet-control-layers-base label,
+    .leaflet-control-layers .leaflet-control-layers-separator {
+    font-size: 18px;
+    padding: 5px;
+    }
+
+    .leaflet-control-layers-overlays label {
+    font-size: 18px;
+    padding: 5px;
+    }
+
+    #currentLocationControl {
+        top: 200px;
+    }
+
+    .leaflet-tooltip.my-label-tooltip {
+        font-size: 14px;
+    }
+
+    button {
+    font-size: 18px;
+    padding: 10px;
+    }
+
+    #edit-btn {
+    font-size: 18px;
+    }
+    #delete-btn {
+    font-size: 18px;
+    }
+
+
+}
