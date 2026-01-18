@@ -22,7 +22,8 @@ export function initPositioning(map) {
   // 距離計測と標高差と傾斜角
   const distanceElement = document.getElementById('distance');
   const elevationDifferenceElement = document.getElementById('elevationDifference');
-  const slopeElement = document.getElementById('slope');
+  const slopePercentageElement = document.getElementById('slopePercentage');
+  const slopeDegreeElement = document.getElementById('slopeDegree');
 
   // 現在地に移動
   const currentLocationBtn = document.getElementById('currentLocationControl');
@@ -54,16 +55,19 @@ export function initPositioning(map) {
       const distanceMeters = L.latLng(currentLocation.lat, currentLocation.lng).distanceTo(L.latLng(mapCenterLocation.lat, mapCenterLocation.lng));
       const elevationDifference = mapCenterLocation.elevation - currentLocation.elevation;
       let degrees = 0;
+      let percentages = 0;
 
       if (distanceMeters > 0) {
         // Math.atanでラジアンを求め、(180 / Math.PI) を掛けて度（°）に変換
         const radians = Math.atan(elevationDifference / distanceMeters);
         degrees = radians * (180 / Math.PI);
+        percentages = (elevationDifference / distanceMeters) * 100;
       }
 
       distanceElement.textContent = `${(distanceMeters).toFixed(0)} m`;
       elevationDifferenceElement.textContent = `${elevationDifference.toFixed(0)} m`;
-      slopeElement.textContent = `${degrees.toFixed(0)} °`;
+      slopeDegreeElement.textContent = `${degrees.toFixed(0)} °`;
+      slopePercentageElement.textContent = `${percentages.toFixed(0)} %`;
     }
   }
 
