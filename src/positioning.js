@@ -19,9 +19,10 @@ export function initPositioning(map) {
   const mapCenterLngElement = document.getElementById('mapCenterLng');
   const mapCenterElevationElement = document.getElementById('mapCenterElevation');
 
-  // 距離計測と標高差
+  // 距離計測と標高差と傾斜角
   const distanceElement = document.getElementById('distance');
   const elevationDifferenceElement = document.getElementById('elevationDifference');
+  const slopeElement = document.getElementById('slope');
 
   // 現在地に移動
   const currentLocationBtn = document.getElementById('currentLocationControl');
@@ -52,9 +53,17 @@ export function initPositioning(map) {
     if (currentLocation && currentLocation.elevation !== null && mapCenterLocation && mapCenterLocation.elevation !== null) {
       const distanceMeters = L.latLng(currentLocation.lat, currentLocation.lng).distanceTo(L.latLng(mapCenterLocation.lat, mapCenterLocation.lng));
       const elevationDifference = mapCenterLocation.elevation - currentLocation.elevation;
+      let degrees = 0;
+
+      if (distanceMeters > 0) {
+        // Math.atanでラジアンを求め、(180 / Math.PI) を掛けて度（°）に変換
+        const radians = Math.atan(elevationDifference / distanceMeters);
+        degrees = radians * (180 / Math.PI);
+      }
 
       distanceElement.textContent = `${(distanceMeters).toFixed(0)} m`;
       elevationDifferenceElement.textContent = `${elevationDifference.toFixed(0)} m`;
+      slopeElement.textContent = `${degrees.toFixed(0)} °`;
     }
   }
 
