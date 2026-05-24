@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
-  
+
 <head>
   <title>きみどりマップ</title>
   <meta charset="utf-8" />
@@ -8,6 +8,8 @@
 </head>
 
 <body>
+
+  <!-- PWAインストールバナー（Android/Chrome） -->
   <div id="pwa-banner" class="pwa-banner" style="display: none;">
     <div class="pwa-banner-content">
       <img src="icon-192.png" alt="icon" class="pwa-icon">
@@ -20,94 +22,438 @@
     </div>
   </div>
 
+  <!-- PWAインストール案内（iOS Safari） -->
   <div id="ios-pwa-prompt" class="ios-prompt" style="display: none;">
     <div class="ios-prompt-content">
       <div class="ios-prompt-header">
         <strong>ホーム画面に追加して利用</strong>
         <span id="ios-close-btn" class="ios-close">&times;</span>
       </div>
-      <p>この地図をオフラインで使うには、下の<i class="fas fa-share-square" style="color:#007AFF;"></i><strong>「共有」</strong>ボタンを押し、<strong>「ホーム画面に追加」</strong>を選択してください。</p>
+      <p>
+        この地図をオフラインで使うには、
+        <i data-lucide="share-2" style="color:#007AFF;"></i>
+        <strong>「共有」</strong>ボタンを押し、
+        <strong>「ホーム画面に追加」</strong>を選択してください。
+      </p>
       <div class="ios-prompt-arrow"></div>
     </div>
   </div>
 
+  <!-- 地図本体 -->
   <div id="map"></div>
   <div class="crosshair"></div>
 
-  <div id="currentLocationControl" title="現在地に移動">
-    <i class="fas fa-location-arrow"></i>
-  </div>
+  <!-- ナビバー（座標・距離表示） -->
+  <nav class="navbar fixed-top shadow-sm bg-light" data-bs-theme="light" style="height: 50px;">
+    <div class="container-fluid flex-nowrap">
 
-  <div id="bottom-container">
-    <div id="button-row">
-        <button id="saveCenterBtn">REC＋</button>
-        <button id="saveBtn">REC〇</button>
-    </div>
-    <div id="coordinate-text">
-      <font color="#00FFFF">● </font><span id="currentLat"></span>, <span id="currentLng"></span>, <span id="currentElevation"></span>m<br>
-      <font color="blue">＋ </font><span id="mapCenterLat"></span>, <span id="mapCenterLng"></span>, <span id="mapCenterElevation"></span>m<br>
-      ＋までの距離: <span id="distance">---</span> 標高差: <span id="elevationDifference">---</span> 傾き: <span id="slopeDegree">---</span>, <span id="slopePercentage">---</span>
-    </div>
-  </div>
-  
-  <div class="menu">
-    <span class="closeBtn">&times;閉じる</span>
-    <div id="storage-info-display" style="margin-top: 20px; padding-top: 10px; border-top: 1px solid #ccc;">
-      <h3>地図とデータの保存量</h3>
-      <div id="storageUsage">容量: 取得中...</div>
-      <div id="storageQuota">制限: 取得中...</div>
-    </div>
+      <button class="navbar-toggler border-0 p-0" type="button"
+        data-bs-toggle="offcanvas" data-bs-target="#sidebarMenu">
+        <span class="navbar-toggler-icon"></span>
+      </button>
 
-    <h2 class="accordion-header">データ読込</h2>
-    <div class="accordion-content">
-        <button class="menuBtn" id="loadGeoJSON">GeoJSON/KML/GPX</button>
-        <input type="file" id="fileInput" accept=".geojson, .kml, .gpx" style="display: none;" />
-        <p>
-          <label for="labelAttr" class="label-select-title">ラベル</label>
-          <select id="labelAttr" class="label-select"></select>
-          <button id="applyLabel" class="menuBtn">表示</button>
-        </p>
-    </div>
-
-    <h2 class="accordion-header">データ出力</h2>
-    <div class="accordion-content">
-        <p><button class="menuBtn" id="exportGeoJSONBtn">GeoJSON</button></p>
-        <p><button class="menuBtn" id="exportKmlBtn">KML</button></p>
-        <p><button class="menuBtn" id="exportGpxBtn">GPX</button></p>
-    </div>
-
-    <h2 class="accordion-header">データ消去</h2>
-    <div class="accordion-content">
-        <p><button class="menuBtn" id="allClearBtn">POI消去</button></p>
-        <p><button class="menuBtn" id="clearGeojson">読込データ消去</button></p>
-    </div>
-
-    <div class="toggleBtn"><i class="fas fa-bars"></i></div>
-  </div>
-  
-  <div id="poi-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 2000;">
-    <div style="position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); background-color: white; padding: 10px; border-radius: 8px; width: 80%; max-width: 350px;">
-      <h4 id="modal-title">地点登録</h4>
-
-      <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-        <div style="flex: 1;">
-          <label for="poi-stake-type">杭種:</label>
-          <input type="text" id="poi-stake-type" style="width: 100%; padding: 8px; box-sizing: border-box;">
+      <div class="ms-auto d-flex align-items-center text-dark font-monospace navbar-coords">
+        <!-- 現在地・画面中央の座標 -->
+        <div class="border-start border-secondary-subtle ps-2 me-2">
+          <span class="text-primary">◯</span>
+          <span id="currentLat">---</span>, <span id="currentLng">---</span>,
+          <span id="currentElevation">---</span>m<br>
+          <span class="text-primary">＋</span>
+          <span id="mapCenterLat">---</span>, <span id="mapCenterLng">---</span>,
+          <span id="mapCenterElevation">---</span>m
         </div>
-        <div style="flex: 2;">
-          <label for="poi-number">番号 (数値のみ):</label>
-          <input type="number" id="poi-number" style="width: 100%; padding: 8px; margin-bottom: 15px; box-sizing: border-box;"><br>
+        <!-- 距離・標高差 -->
+        <div class="border-start border-secondary-subtle ps-2">
+          ΔD: <span id="distance">---</span><br>
+          ΔH: <span id="elevationDifference">---</span>
+          (<span id="slopeDegree">---</span>)
         </div>
       </div>
 
-      <label for="poi-description">説明:</label>
-      <textarea id="poi-description" rows="3" style="width: 100%; padding: 8px; margin-bottom: 20px; box-sizing: border-box;"></textarea>
-      
-      <button id="modal-save" style="background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; margin-right: 10px;">保存</button>
-      <button id="modal-cancel" style="background-color: #6c757d; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer;">キャンセル</button>
+    </div>
+  </nav>
+
+  <!-- ライン記録中インジケーター（ナビバー直下・中央） -->
+  <div id="line-mode-indicator" style="display:none;">
+    <i data-lucide="pencil-line" class="me-1"></i>ライン記録中
+    <button id="line-undo-btn" class="vertex-delete-cancel-btn" title="最後の点を取り消す"><i data-lucide="undo-2"></i></button>
+    <button id="line-finish-btn" class="line-finish-btn" title="ラインを完了する">完了</button>
+  </div>
+
+  <!-- 分割モードインジケーター（ナビバー直下・中央） -->
+  <div id="split-mode-indicator" style="display:none;">
+    <i data-lucide="scissors" class="me-1"></i>分割するラインをクリック
+    <button id="split-cancel-btn" class="vertex-delete-cancel-btn" title="中止"><i data-lucide="x"></i></button>
+  </div>
+
+  <!-- 頂点編集中インジケーター（ナビバー直下・中央） -->
+  <div id="vertex-edit-indicator" style="display:none;">
+    <i data-lucide="move" class="me-1"></i>頂点編集中
+    <button id="vertex-edit-move-btn"   class="line-finish-btn vertex-edit-mode-btn active" title="移動モード">移動</button>
+    <button id="vertex-edit-delete-btn" class="line-finish-btn vertex-edit-mode-btn" title="削除モード">削除</button>
+    <button id="vertex-edit-insert-btn" class="line-finish-btn vertex-edit-mode-btn" title="挿入モード">挿入</button>
+    <button id="vertex-edit-cancel-btn" class="vertex-delete-cancel-btn" title="キャンセル"><i data-lucide="x"></i></button>
+    <button id="vertex-edit-commit-btn" class="line-finish-btn" title="頂点編集を完了する">編集完了</button>
+  </div>
+
+  <!-- 現在地移動ボタン -->
+  <div id="currentLocationControl" title="現在地に移動">
+    <i data-lucide="navigation"></i>
+  </div>
+
+  <!-- RECボタン（画面下部） -->
+  <div class="fixed-bottom mb-5 z-1003">
+    <div class="d-flex justify-content-between px-3">
+      <button id="saveCenterBtn" class="btn-rec btn-rec--center">
+        <span class="btn-rec__icon">＋</span>
+        <span class="btn-rec__label">REC</span>
+      </button>
+      <button id="saveBtn" class="btn-rec btn-rec--current">
+        <span class="btn-rec__icon">〇</span>
+        <span class="btn-rec__label">REC</span>
+      </button>
     </div>
   </div>
-   
+
+  <!-- ===== サイドメニュー（Offcanvas） ===== -->
+  <div class="offcanvas offcanvas-start offcanvas-sidebar shadow-lg"
+       tabindex="-1" id="sidebarMenu" aria-labelledby="sidebarMenuLabel">
+
+    <div class="offcanvas-header bg-light border-bottom">
+      <h5 class="offcanvas-title fw-bold" id="sidebarMenuLabel">メニュー</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+
+    <div class="offcanvas-body p-0">
+
+      <!-- ストレージ使用量 -->
+      <div class="p-3 bg-light border-bottom">
+        <h6 class="fw-bold mb-2 small">
+          <i data-lucide="hard-drive" class="me-2"></i>地図とデータの保存量
+        </h6>
+        <div id="storageUsage" class="small text-secondary">使用量: 取得中...</div>
+        <div id="storageQuota" class="small text-secondary">容量上限: 取得中...</div>
+        <div class="progress mt-2" style="height: 6px;">
+          <div id="storage-bar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- アコーディオンメニュー -->
+      <div class="accordion accordion-flush" id="menuAccordion">
+
+        <!-- オフラインマップ -->
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed fw-bold" type="button"
+              data-bs-toggle="collapse" data-bs-target="#collapseOffline">
+              <i data-lucide="map" class="me-2"></i>オフラインマップ
+            </button>
+          </h2>
+          <div id="collapseOffline" class="accordion-collapse collapse" data-bs-parent="#menuAccordion">
+            <div class="accordion-body d-grid gap-2">
+              <button class="btn btn-outline-primary btn-sm text-start w-100" id="showStorageAreaBtn">
+                <i data-lucide="box-select" class="me-2"></i>保存エリア表示
+              </button>
+              <div id="offline-layer-list" class="offline-layer-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- データ一覧（POI・ライン） -->
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed fw-bold" type="button"
+              data-bs-toggle="collapse" data-bs-target="#collapseDataList">
+              <i data-lucide="list" class="me-2"></i>登録データ
+            </button>
+          </h2>
+          <div id="collapseDataList" class="accordion-collapse collapse" data-bs-parent="#menuAccordion">
+            <div class="accordion-body d-grid gap-2">
+              <div class="p-2 border-bottom d-flex align-items-center gap-2 flex-wrap">
+                <button id="toggleAllLabelsBtn" class="btn btn-sm btn-outline-secondary" title="全ラベルを非表示">
+                  <i data-lucide="tag" class="me-2"></i>ラベル表示
+                </button>
+                <div class="btn-group btn-group-sm">
+                  <input type="radio" class="btn-check" name="labelMode" id="labelModeNumber" value="number">
+                  <label class="btn btn-outline-secondary" for="labelModeNumber">番号</label>
+                  <input type="radio" class="btn-check" name="labelMode" id="labelModeDesc" value="description">
+                  <label class="btn btn-outline-secondary" for="labelModeDesc">属性</label>
+                </div>
+                <label class="d-flex align-items-center gap-1 mb-0 small" title="POI・ラインの色">
+                  <i data-lucide="palette"></i>色
+                  <input type="color" id="poi-color-picker" value="#004926"
+                    style="width:32px;height:26px;padding:2px;border:1px solid #ced4da;border-radius:4px;cursor:pointer;background:none;">
+                </label>
+              </div>
+
+              <div id="data-list-container"></div>
+              <div class="d-grid gap-2 mb-3 w-100">
+                <button class="btn btn-success btn-sm w-100" id="shareBtn">データを一括保存<i data-lucide="download" class="me-1"></i></button>
+                <button class="btn btn-danger btn-sm" id="allClearBtn">全データ消去</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- データ読込 -->
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed fw-bold" type="button"
+              data-bs-toggle="collapse" data-bs-target="#collapseLoad">
+              <i data-lucide="file-up" class="me-2"></i>データ読込
+            </button>
+          </h2>
+          <div id="collapseLoad" class="accordion-collapse collapse" data-bs-parent="#menuAccordion">
+            <div class="accordion-body">
+              <div class="d-grid gap-2 mb-3">
+                <button class="btn btn-primary" id="loadGeoJSON">GeoJSON / KML / GPX / ZIP</button>
+                <button class="btn btn-outline-primary" id="loadShpFolder">SHP（shp, dbf, prj, shxすべて選択）</button>
+              </div>
+              <input type="file" id="fileInput" accept=".geojson,.json,.kml,.gpx,.zip" style="display: none;">
+              <input type="file" id="folderInput" multiple accept=".shp,.dbf,.prj,.cpg,.qpj" style="display: none;">
+
+              <div id="import-progress" class="d-none mb-2">
+                <div class="progress" style="height: 6px;">
+                  <div class="progress-bar progress-bar-striped progress-bar-animated w-100" role="progressbar"></div>
+                </div>
+                <small id="import-progress-msg" class="text-muted d-block mt-1 text-center"></small>
+              </div>
+
+              <!-- 読み込み済みファイル一覧（ラベル・削除はファイルごとに管理） -->
+              <div id="layer-list" class="layer-list"></div>
+
+              <div class="d-grid gap-2 mb-3">
+                <button class="btn btn-outline-danger btn-sm" id="clearGeojson">データ全消去</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- 設定 -->
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed fw-bold" type="button"
+              data-bs-toggle="collapse" data-bs-target="#collapseSettings">
+              <i data-lucide="settings" class="me-2" style="flex-shrink:0"></i>設定
+            </button>
+          </h2>
+          <div id="collapseSettings" class="accordion-collapse collapse" data-bs-parent="#menuAccordion">
+            <div class="accordion-body d-grid gap-3">
+
+              <!-- スリープ防止タイマー -->
+              <div>
+                <label for="wakeLockDelaySelect" class="form-label fw-bold small mb-1">
+                  <i data-lucide="moon" class="me-1"></i>スリープまでの時間
+                </label>
+                <select id="wakeLockDelaySelect" class="form-select form-select-sm">
+                  <option value="1">1分後</option>
+                  <option value="3">3分後</option>
+                  <option value="5">5分後</option>
+                  <option value="10">10分後</option>
+                  <option value="30">30分後</option>
+                  <option value="0">無制限</option>
+                </select>
+                <div class="form-text text-secondary" style="font-size:0.75rem;">
+                  地図操作が止まってから、この時間後にスリープします。
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /accordion -->
+
+      <!-- ヘルプ -->
+      <div class="p-3 border-top">
+        <a href="https://salmonzebra2.sakura.ne.jp/webmap/kimidoriMAP_help/" target="_blank" rel="noopener noreferrer"
+           class="btn btn-outline-secondary w-100 d-flex align-items-center gap-2">
+          <i data-lucide="circle-help"></i>使い方マニュアル
+        </a>
+      </div>
+
+    </div><!-- /offcanvas-body -->
+  </div><!-- /offcanvas -->
+
+  <!-- ===== ライン編集モーダル ===== -->
+  <div id="line-modal" class="poi-modal-overlay" style="display: none;">
+    <div class="poi-modal-dialog">
+      <div class="poi-modal-header">
+        <h4 id="line-modal-title" class="poi-modal-title">ライン編集</h4>
+      </div>
+      <div class="poi-modal-body">
+        <label for="line-name" class="poi-modal-label">ライン名</label>
+        <input type="text" id="line-name" class="poi-modal-input">
+        <label for="line-description" class="poi-modal-label" style="margin-top:8px">説明</label>
+        <textarea id="line-description" rows="3" class="poi-modal-input poi-modal-textarea"></textarea>
+        <div style="margin-top:8px">
+          <label class="poi-modal-label">延長（自動計算）</label>
+          <input type="text" id="line-length-display" class="poi-modal-input" readonly
+            style="background:#f0f0f0;cursor:default">
+        </div>
+      </div>
+      <div class="poi-modal-actions">
+        <button id="line-modal-cancel" class="poi-modal-btn poi-modal-btn--cancel">キャンセル</button>
+        <button id="line-modal-save"   class="poi-modal-btn poi-modal-btn--save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ポリゴン編集モーダル ===== -->
+  <div id="polygon-modal" class="poi-modal-overlay" style="display: none;">
+    <div class="poi-modal-dialog">
+      <div class="poi-modal-header">
+        <h4 class="poi-modal-title">ポリゴン編集</h4>
+      </div>
+      <div class="poi-modal-body">
+        <label for="polygon-name" class="poi-modal-label">ポリゴン名</label>
+        <input type="text" id="polygon-name" class="poi-modal-input">
+        <label for="polygon-description" class="poi-modal-label" style="margin-top:8px">説明</label>
+        <textarea id="polygon-description" rows="3" class="poi-modal-input poi-modal-textarea"></textarea>
+        <div style="margin-top:8px">
+          <label class="poi-modal-label">面積（自動計算）</label>
+          <input type="text" id="polygon-area-display" class="poi-modal-input" readonly
+            style="background:#f0f0f0;cursor:default">
+        </div>
+      </div>
+      <div class="poi-modal-actions">
+        <button id="polygon-modal-cancel" class="poi-modal-btn poi-modal-btn--cancel">キャンセル</button>
+        <button id="polygon-modal-save"   class="poi-modal-btn poi-modal-btn--save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== POI登録・編集モーダル ===== -->
+  <div id="poi-modal" class="poi-modal-overlay" style="display: none;">
+    <div class="poi-modal-dialog">
+
+      <div class="poi-modal-header">
+        <h4 id="modal-title" class="poi-modal-title">地点登録</h4>
+      </div>
+
+      <div class="poi-modal-body">
+        <div class="poi-modal-row">
+          <div class="poi-modal-field">
+            <label for="poi-stake-type" class="poi-modal-label">杭種</label>
+            <input type="text" id="poi-stake-type" class="poi-modal-input">
+          </div>
+          <div class="poi-modal-field poi-modal-field--wide">
+            <label for="poi-number" class="poi-modal-label">番号（数値のみ）</label>
+            <input type="number" id="poi-number" class="poi-modal-input">
+          </div>
+        </div>
+
+        <label for="poi-description" class="poi-modal-label">説明</label>
+        <textarea id="poi-description" rows="3" class="poi-modal-input poi-modal-textarea"></textarea>
+
+        <div style="margin-top:10px">
+          <button type="button" id="modal-camera-btn" class="poi-modal-btn" style="width:100%">
+            <i data-lucide="camera" class="me-1"></i>写真を撮影
+          </button>
+          <input type="file" id="modal-photo-input" accept="image/*" capture="environment" style="display:none">
+          <img id="modal-photo-preview" src="" alt="撮影プレビュー"
+               style="display:none;max-width:100%;border-radius:4px;margin-top:6px">
+        </div>
+
+      </div>
+
+      <div class="poi-modal-actions">
+        <button id="modal-cancel" class="poi-modal-btn poi-modal-btn--cancel">キャンセル</button>
+        <button id="modal-save"   class="poi-modal-btn poi-modal-btn--save">保存</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===== 地図保存 確認モーダル ===== -->
+  <div class="modal fade" id="save-confirm-modal" tabindex="-1" data-bs-backdrop="static" aria-labelledby="saveConfirmModalLabel">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="saveConfirmModalLabel">
+            <i data-lucide="cloud-download" class="me-2"></i>地図を保存
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+        </div>
+        <div class="modal-body">
+          <p id="save-confirm-message" class="mb-0"></p>
+            オフラインでも利用できるように地図（現在表示されている範囲内）を保存します。<br>
+          </div>
+          <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="button" class="btn btn-primary" id="save-confirm-ok">
+            <i data-lucide="cloud-download" class="me-1"></i>保存する
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 地図保存 進捗モーダル ===== -->
+  <div class="modal fade" id="save-progress-modal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-labelledby="saveProgressModalLabel">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="saveProgressModalLabel">
+            <i data-lucide="cloud-download" class="me-2"></i>地図を保存中
+          </h5>
+        </div>
+        <div class="modal-body">
+          <p id="save-progress-message" class="mb-2">準備中...</p>
+          <div class="progress mb-1" style="height: 20px;">
+            <div id="save-progress-bar"
+                 class="progress-bar"
+                 role="progressbar"
+                 style="width: 0%"
+                 aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+            </div>
+          </div>
+          <small id="save-progress-detail" class="text-secondary"></small>
+        </div>
+        <div class="modal-footer" id="save-progress-footer" style="display: none;">
+          <button type="button" class="btn btn-primary" data-bs-dismiss="modal">閉じる</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 保存フォーマット選択モーダル ===== -->
+  <div class="modal fade" id="share-format-modal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header bg-success text-white">
+          <h5 class="modal-title"><i data-lucide="download" class="me-2"></i>保存フォーマット</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body d-grid gap-2">
+          <button class="btn btn-outline-success text-start" data-share-format="kmz">
+            <i data-lucide="archive" class="me-2"></i><strong>KMZ</strong>
+            <span class="badge bg-success ms-1">推奨</span>
+            <div class="text-muted small">地点・ライン・ポリゴン＋写真</div>
+          </button>
+          <button class="btn btn-outline-secondary text-start" data-share-format="kml">
+            <i data-lucide="file-code" class="me-2"></i><strong>KML</strong>
+            <div class="text-muted small">地点・ライン・ポリゴン</div>
+          </button>
+          <button class="btn btn-outline-secondary text-start" data-share-format="geojson">
+            <i data-lucide="braces" class="me-2"></i><strong>GeoJSON</strong>
+            <div class="text-muted small">地点・ライン・ポリゴン</div>
+          </button>
+          <button class="btn btn-outline-secondary text-start" data-share-format="gpx">
+            <i data-lucide="map" class="me-2"></i><strong>GPX</strong>
+            <div class="text-muted small">地点・ライン</div>
+          </button>
+          <button class="btn btn-outline-secondary text-start" data-share-format="photos">
+            <i data-lucide="camera" class="me-2"></i><strong>写真ZIP</strong>
+            <div class="text-muted small">写真のみ</div>
+          </button>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="src/script.js"></script>
 
 </body>
