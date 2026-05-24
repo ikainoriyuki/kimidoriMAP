@@ -1,351 +1,279 @@
 import L from 'leaflet';
 import 'leaflet.offline';
-import * as turf from '@turf/turf';
+import cloudDownloadUrl from './cloud-download.svg';
 import { CS_MAPS_CONFIG, FOREST_TYPE_MAPS_CONFIG } from './map_config.js';
-import 'leaflet.vectorgrid';
-import * as topojson from 'topojson-client';
+import { StorageManager } from './map/storage_manager.js';
+import { OfflineProgressUI } from './map/offline_progress_ui.js';
+import { createGsiVectorOverlay, createGsiPlaceNameOverlay } from './map/gsi_vector_overlay.js';
+import { LayerFactory } from './map/layer_factory.js';
+import { setupBoundsVisibility } from './map/bounds_visibility.js';
+import { setupStorageAreaOverlay } from './map/storage_area_overlay.js';
+import { setupOfflineLayerList } from './map/offline_layer_list.js';
 
-const MAP_STATE_KEY = 'mapState';
+// ============================================================
+// 定数
+// ============================================================
+const MAP_STATE_KEY  = 'mapState';
+const DEFAULT_CENTER = [35.6809591, 139.7673068];
+const DEFAULT_ZOOM   = 16;
 
-// ==========================================
-// 1. ストレージ・ユーティリティ(leaflet.offline用)
-// ==========================================
-const StorageManager = {
-  formatBytes(bytes, decimals = 2) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-  },
-
-  async updateStorageInfo() {
-    const usageDiv = document.getElementById('storageUsage');
-    const quotaDiv = document.getElementById('storageQuota');
-    if (!usageDiv || !quotaDiv) return;
-
-    try {
-      if (navigator.storage && navigator.storage.estimate) {
-        const { usage = 0, quota = 0 } = await navigator.storage.estimate();
-        const percentage = quota > 0 ? ((usage / quota) * 100).toFixed(1) : 'N/A';
-        usageDiv.innerHTML = `使用量: ${this.formatBytes(usage)} <span style="font-size: small;">(${percentage}%)</span>`;
-        quotaDiv.innerHTML = `容量: ${this.formatBytes(quota)}`;
-      }
-    } catch (err) {
-      console.error("Storage info error:", err);
-    }
-  },
-
-  // indexedDBの永続化をリクエスト
-  async requestPersistence() {
-    if (navigator.storage && navigator.storage.persist) {
-      const isPersisted = await navigator.storage.persisted();
-      if (!isPersisted) await navigator.storage.persist();
-    }
-  }
-};
-
-// ==========================================
-// 2. マップ位置保存（前回終了した地点から開始）
-// ==========================================
+// ============================================================
+// 地図の位置状態の保存・復元
+// ============================================================
 const MapStateManager = {
   save(map) {
-    const center = map.getCenter();
-    const state = { lat: center.lat, lng: center.lng, zoom: map.getZoom() };
-    localStorage.setItem(MAP_STATE_KEY, JSON.stringify(state));
+    const { lat, lng } = map.getCenter();
+    localStorage.setItem(MAP_STATE_KEY, JSON.stringify({ lat, lng, zoom: map.getZoom() }));
   },
   load() {
-    const saved = localStorage.getItem(MAP_STATE_KEY);
-    try { return saved ? JSON.parse(saved) : null; } catch { return null; }
-  }
-};
-
-// ==========================================
-// 3. leaflet.offlineの進捗UI
-// ==========================================
-class OfflineProgressUI {
-  constructor(map) {
-    this.container = L.DomUtil.create('div', 'leaflet-control-savetiles-progress');
-    this.setupStyles();
-    map.getContainer().appendChild(this.container);
-  }
-
-  setupStyles() {
-    Object.assign(this.container.style, {
-      position: 'absolute', bottom: '10px', left: '50%', transform: 'translateX(-50%)',
-      padding: '8px 15px', backgroundColor: 'rgba(0, 0, 0, 0.7)', color: 'white',
-      borderRadius: '6px', zIndex: '10000', display: 'none', pointerEvents: 'none'
-    });
-  }
-
-  show(message, isError = false) {
-    this.container.style.display = 'block';
-    this.container.style.backgroundColor = isError ? 'rgba(255, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.7)';
-    this.container.innerHTML = message;
-    if (!message.includes('ダウンロード中:')) {
-      setTimeout(() => this.container.style.display = 'none', isError ? 8000 : 3000);
-    }
-  }
-
-  bindEvents(layer, name) {
-    let total = 0, current = 0;
-    layer.on('savestart', e => {
-      total = e._tilesforSave?.length || 0;
-      current = 0;
-      this.show(`[${name}] ${total}枚ダウンロード開始...`);
-    });
-    layer.on('savetileend', () => {
-      current++;
-      const percent = total > 0 ? Math.round((current / total) * 100) : 0;
-      this.show(`[${name}] ダウンロード中: ${percent}% (${current}/${total})`);
-    });
-    layer.on('saveend', () => {
-      this.show(`[${name}] 完了 (${total}枚)`);
-      StorageManager.updateStorageInfo();
-    });
-    layer.on('saveerror', e => {
-      this.show(`❌ [${name}] エラー: ${e.message || '通信失敗'}`, true);
-    });
-    layer.on('tilesremoved', () => {
-      this.show(`🗑️ タイルを削除しました。`);
-      StorageManager.updateStorageInfo();
-    });
-  }
-}
-
-// ==========================================
-// 4. 地理院Vectorタイル（道路・注記）
-// ==========================================
-function createGsiVectorOverlay() {
-  const overlay = L.gridLayer({ attribution: "<a href='https://github.com/gsi-cyberjapan/vector-tile-experiment'>国土地理院ベクトルタイル提供実験</a>を加工して作成", maxZoom: 18 });
-
-  overlay.createTile = function(coords, done) {
-    const tile = document.createElement('div');
-    const { z, x, y } = coords;
-    const urls = {
-      rdcl: `https://cyberjapandata.gsi.go.jp/xyz/experimental_rdcl/${z}/${x}/${y}.geojson`,
-      anno: `https://cyberjapandata.gsi.go.jp/xyz/experimental_anno/${z}/${x}/${y}.geojson`,
-      nrpt: `https://cyberjapandata.gsi.go.jp/xyz/experimental_nrpt/${z}/${x}/${y}.geojson`
-    };
-
-    Promise.all(Object.entries(urls).map(([key, url]) => 
-      fetch(url).then(res => res.ok ? res.json() : null).then(data => ({ key, data }))
-    )).then(results => {
-      results.forEach(({ key, data }) => {
-        if (!data) return;
-        L.geoJSON(data, {
-          style: (f) => key === 'rdcl' ? getRoadStyle(f) : { opacity: 0 },
-          pointToLayer: (f, ll) => createLabelMarker(f, ll, key)
-        }).addTo(this._map);
-      });
-      done(null, tile);
-    }).catch(() => done(null, tile));
-
-    return tile;
-  };
-
-  return overlay;
-}
-
-// 道路スタイルの判定ロジック
-function getRoadStyle(feature) {
-  const { rdCtg, type, rnkWidth } = feature.properties;
-  let style = { color: '#884400', weight: 1.5, opacity: 0.8 };
-  if (rdCtg === "高速自動車国道等") { style.color = '#007e39ff'; style.weight = 6; }
-  else if (rdCtg === "国道") { style.color = '#ff3333ff'; style.weight = 5; }
-  if (type === "徒歩道") style.dashArray = '2, 4';
-  return style;
-}
-
-// ラベル作成ロジック
-function createLabelMarker(feature, latlng, key) {
-  let text = key === 'anno' ? feature.properties.text : (key === 'nrpt' ? feature.properties.name : "");
-  if (!text) return null;
-  return L.marker(latlng, {
-    icon: L.divIcon({
-      className: 'gsi-label-icon',
-      html: `<div style="text-shadow: 2px 2px 0 #fff; font-weight:bold;">${text}</div>`,
-      iconSize: [0, 0]
-    }),
-    interactive: false
-  });
-}
-
-// ==========================================
-// 6. ベースレイヤーと動的なレイヤー選択
-// ==========================================
-const LayerFactory = {
-  // ベースレイヤー（背景地図）の生成
-  createBaseLayers() {
-    return {
-      'OpenStreetMap': L.tileLayer.offline(
-        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-        { 
-          maxZoom: 23, 
-          attribution: '&copy; OpenStreetMap', 
-          saveToCache: true, 
-          useCache: true 
-        }
-      ),
-      '地理院地図': L.tileLayer.offline(
-        'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
-        { minZoom: 5, maxNativeZoom: 18, maxZoom: 23, attribution: '地理院タイル' }
-      ),
-      '空中写真（最新）': L.tileLayer.offline(
-        'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',
-        { minZoom: 5, maxNativeZoom: 17, maxZoom: 23, attribution: '地理院タイル' }
-      ),
-      '空中写真（1974～1979）': L.tileLayer.offline(
-        'https://cyberjapandata.gsi.go.jp/xyz/gazo1/{z}/{x}/{y}.jpg',
-        { minZoom: 5, maxNativeZoom: 17, maxZoom: 23, attribution: '地理院タイル' }
-      )
-    };
+    try { return JSON.parse(localStorage.getItem(MAP_STATE_KEY)); } catch { return null; }
   },
-
-  // CS・林相などの動的レイヤーの生成
-  createDynamicLayers(configs, ui) {
-    const dynamicLayers = {};
-    configs.forEach(config => {
-      const layer = L.tileLayer.offline(config.url, {
-        ...config,
-        saveToCache: true,
-        useCache: true,
-        crossOrigin: 'anonymous'
-      });
-      
-      // オフラインイベントのバインド
-      ui.bindEvents(layer, config.name);
-
-      dynamicLayers[config.id] = {
-        layer: layer,
-        name: config.name,
-        bounds: L.latLngBounds(config.bounds),
-        isAdded: false
-      };
-    });
-    return dynamicLayers;
-  }
 };
 
-// ==========================================
-// 地図選択レイヤの表示内容
-// ==========================================
-
-function setupPrefBoundaryControl(map, dynamicLayers, layerControl) {
-  let prefData = null;
-
-  const updateVisibility = () => {
-    if (!prefData) return;
-
-    const bounds = map.getBounds();
-    const screenPoly = turf.bboxPolygon([
-      bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()
-    ]);
-    
-    const activePrefs = prefData.features
-      .filter(f => {
-        try { return turf.booleanIntersects(screenPoly, f); } catch { return false; }
-      })
-      .map(f => f.properties.N03_001);
-
-    Object.keys(dynamicLayers).forEach(id => {
-      const item = dynamicLayers[id];
-      const isVisible = activePrefs.some(prefName => item.name.includes(prefName));
-
-      if (isVisible && !item.isAdded) {
-        layerControl.addBaseLayer(item.layer, item.name);
-        item.isAdded = true;
-      } else if (!isVisible && item.isAdded) {
-        layerControl.removeLayer(item.layer);
-        if (map.hasLayer(item.layer)) map.removeLayer(item.layer);
-        item.isAdded = false;
-      }
-    });
-  };
-
-  // 読み込み
-  fetch('./pref_boundary.topojson') 
-      .then(res => res.json())
-      .then(topoData => {
-        // TopoJSONをGeoJSONに変換
-        // objectsのキー名は変換元のファイル名であることが多いため、動的に取得します
-        const firstObjectName = Object.keys(topoData.objects)[0];
-        prefData = topojson.feature(topoData, topoData.objects[firstObjectName]);
-        
-        updateVisibility();
-      })
-      .catch(err => console.warn("境界データのロード失敗:", err));
-
-    map.on('moveend', updateVisibility);
-  }
-
-// ==========================================
-// 7. メイン初期化関数
-// ==========================================
-
+// ============================================================
+// メイン初期化
+// ============================================================
 export async function initMap() {
-  // 1. 状態の復元と地図の初期化
+  // 1. 地図生成（前回の位置を復元）
   const saved = MapStateManager.load();
   const map = L.map('map', {
-    center: saved ? [saved.lat, saved.lng] : [35.6809591, 139.7673068],
-    zoom: saved ? saved.zoom : 16,
+    center: saved ? [saved.lat, saved.lng] : DEFAULT_CENTER,
+    zoom:   saved ? saved.zoom            : DEFAULT_ZOOM,
     maxZoom: 23,
   });
 
-  // 2. UIコンポーネントの準備
+  // 2. オフライン進捗UI
   const ui = new OfflineProgressUI(map);
 
-  // 3. レイヤーの生成 (Factoryを使用)
+  // 3. ベースレイヤー
   const baseLayers = LayerFactory.createBaseLayers();
-  
-  // 各ベースレイヤーにオフラインイベントをバインド
-  Object.entries(baseLayers).forEach(([name, layer]) => ui.bindEvents(layer, name));
 
-  // デフォルトレイヤーを表示
-  const currentActiveLayer = baseLayers['地理院地図'];
-  map.addLayer(currentActiveLayer);
+  const defaultLayer = baseLayers['地理院地図'];
+  map.addLayer(defaultLayer);
 
-  // 4. レイヤーコントロールのセットアップ
+  // 4. レイヤーコントロール
   const layerControl = L.control.layers(baseLayers, []).addTo(map);
 
-  // 5. 動的レイヤー (CS/林相) のセットアップ
-  const allConfigs = [...CS_MAPS_CONFIG, ...FOREST_TYPE_MAPS_CONFIG];
-  const dynamicLayers = LayerFactory.createDynamicLayers(allConfigs, ui);
+  // 5. CS・林相レイヤーをカテゴリ別に L.layerGroup にまとめる
+  const csGroup   = LayerFactory.createGroupLayer(CS_MAPS_CONFIG,          ui, '微地形図');
+  const ftGroup   = LayerFactory.createGroupLayer(FOREST_TYPE_MAPS_CONFIG, ui, '林相識別図');
+  const groupLayers = [csGroup, ftGroup];
 
-  // 6. 都道府県境界データに基づいた表示制御ロジック
-  setupPrefBoundaryControl(map, dynamicLayers, layerControl);
+  groupLayers.forEach(({ group, name }) => layerControl.addBaseLayer(group, name));
 
+  const updateBoundsVisibility = setupBoundsVisibility(map, groupLayers);
 
-  // 7. leaflet.offlineの保存コントロール設定
-  const saveControl = L.control.savetiles(currentActiveLayer, {
-    position: 'topright',
+  // 6. タイル保存コントロール
+  let activeBaseTileLayer = defaultLayer;
+
+  const saveControl = L.control.savetiles(defaultLayer, {
     zoomlevels: [16, 17, 18],
-    confirm: (layer, cb) => {
+    confirm: async (layer, cb) => {
       const count = layer._tilesforSave?.length || 0;
       if (count > 2500) {
-        alert(`枚数が多すぎます(${count}枚)。範囲を狭めてください。`);
+        ui.showError(`枚数が多すぎます(${count}枚)。範囲を狭めてください。`);
         return;
       }
-      if (confirm(`保存しますか？ (${count}枚)`)) cb();
+      if (await ui.confirm(`保存しますか？ (${count}枚)`)) cb();
     },
-    confirmRemoval: (layer, cb) => { if (confirm("削除しますか？")) cb(); },
-    saveText: '💾',   // 保存アイコン
-    rmText: '🗑️',    // 削除アイコン
-
+    confirmRemoval: async (_layer, cb) => {
+      if (await ui.confirm('保存済みのタイルを削除しますか？')) cb();
+    },
   }).addTo(map);
+  saveControl.getContainer().style.display = 'none';
 
-  map.on('baselayerchange', e => saveControl.setLayer(e.layer));
+  map.on('baselayerchange', e => {
+    if (e.layer._url) {
+      activeBaseTileLayer = e.layer;
+      saveControl.setLayer(e.layer);
+    } else {
+      // グループレイヤー（微地形図・林相識別図）に切り替えた場合は
+      // 背景タイルレイヤーを保存対象から外す
+      activeBaseTileLayer = null;
+    }
+    updateBoundsVisibility();
+  });
+
+  // 表示中の全 tileLayer.offline を順次保存するボタン
+  const SaveAllControl = L.Control.extend({
+    onAdd(map) {
+      const btn = L.DomUtil.create('a', 'leaflet-bar-part');
+      btn.href  = '#';
+      btn.title = '表示中の全レイヤーを保存';
+
+      const icon = L.DomUtil.create('img', '', btn);
+      icon.src    = cloudDownloadUrl;
+      icon.style.width  = '20px';
+      icon.style.height = '20px';
+
+      btn.style.display        = 'flex';
+      btn.style.alignItems     = 'center';
+      btn.style.justifyContent = 'center';
+      btn.style.width          = '30px';
+      btn.style.height         = '30px';
+      btn.style.backgroundColor = '#fff';
+
+      L.DomEvent.on(btn, 'click', L.DomEvent.stop).on(btn, 'click', async () => {
+        const targets = [];
+        // 背景タイルレイヤーが選択中の場合のみ対象に追加
+        if (activeBaseTileLayer) targets.push({ layer: activeBaseTileLayer, name: '背景地図' });
+
+        groupLayers.forEach(({ group, tileLayers }) => {
+          if (!map.hasLayer(group)) return;
+          tileLayers.forEach(entry => {
+            if (entry.inGroup) targets.push({ layer: entry.tileLayer, name: entry.name });
+          });
+        });
+
+        if (targets.length === 0) {
+          await ui.confirm('保存対象のレイヤーがありません。');
+          return;
+        }
+
+        // 各レイヤーのタイル数を事前計算（確認ダイアログ表示前）
+        const tileCounts = targets.map(({ layer, name }) => {
+          saveControl.setLayer(layer);
+          return { name, count: saveControl._calculateTiles().length };
+        });
+        if (activeBaseTileLayer) saveControl.setLayer(activeBaseTileLayer);
+
+        const totalCount = tileCounts.reduce((sum, t) => sum + t.count, 0);
+        const countLines = tileCounts.map(({ name, count }) => `・${name}: ${count}枚`).join('\n');
+
+        if (totalCount > 2500) {
+          ui.showError(
+            `サーバー負荷軽減のため、範囲を狭くしてから再度保存してください（推奨2,500枚以下；現状 ${totalCount} 枚）。\n\n${countLines}`
+          );
+          return;
+        }
+
+        const ok = await ui.confirm(
+          `表示範囲の地図を保存します。\n合計: ${totalCount}枚\n\n${countLines}`
+        );
+        if (!ok) return;
+
+        // ネットワークエラー・IndexedDB書き込みエラーで loader チェーンが途中終了するのを防ぐため
+        // _loadTile/_saveTile をパッチし、エラー時もカウントを維持してチェーンを継続する
+        const origConfirm  = saveControl.options.confirm;
+        const origLoadTile = saveControl._loadTile;
+        const origSaveTile = saveControl._saveTile;
+        saveControl._loadTile = async function(tile) {
+          try {
+            return await Promise.race([
+              origLoadTile.call(saveControl, tile),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 30000)),
+            ]);
+          } catch {
+            saveControl.status.lengthLoaded += 1;
+            saveControl._baseLayer.fire('loadtileend', saveControl.status);
+            if (saveControl.status.lengthLoaded === saveControl.status.lengthToBeSaved) {
+              saveControl._baseLayer.fire('loadend', saveControl.status);
+            }
+            return undefined;
+          }
+        };
+        saveControl._saveTile = async function(tile, blob) {
+          try {
+            return await origSaveTile.call(saveControl, tile, blob);
+          } catch {
+            saveControl.status.lengthSaved += 1;
+            saveControl._baseLayer.fire('savetileend', saveControl.status);
+            if (saveControl.status.lengthSaved === saveControl.status.lengthToBeSaved) {
+              saveControl._baseLayer.fire('saveend', saveControl.status);
+            }
+          }
+        };
+
+        let aborted = false;
+        for (const { layer, name } of targets) {
+          if (aborted) break;
+          saveControl.setLayer(layer);
+          ui.resetProgress(name);
+
+          await new Promise((resolve) => {
+            let total = -1;
+            let loadCount = 0;
+            let resolved = false;
+
+            const done = () => {
+              if (resolved) return;
+              resolved = true;
+              layer.off('savestart', onSaveStart);
+              layer.off('loadtileend', onLoadTileEnd);
+              layer.off('saveend', done);
+              resolve();
+            };
+
+            // タイル数が0の場合は saveend/loadtileend が発火しないため savestart で検知
+            const onSaveStart = (e) => {
+              total = e.lengthToBeSaved;
+              ui.updateProgress(0, total, name);
+              if (total === 0) done();
+            };
+
+            // loadtileend はキャッシュ済み・新規・エラーを問わず1タイルにつき1回発火する。
+            // total 回発火した時点で全タイル処理完了。
+            // leaflet.offline v3 の saveend はキャッシュ済みタイルがあると発火しないバグが
+            // あるため、loadtileend カウントで完了を判定する。
+            const onLoadTileEnd = () => {
+              loadCount++;
+              ui.updateProgress(loadCount, total, name);
+              if (total > 0 && loadCount >= total) {
+                // 最後のタイルの IndexedDB 書き込み完了を待ってから解決
+                setTimeout(done, 0);
+              }
+            };
+
+            layer.on('savestart', onSaveStart);
+            layer.on('loadtileend', onLoadTileEnd);
+            layer.on('saveend', done);   // 全タイル新規の場合の正常系バックアップ
+
+            // confirm をここで上書きすることで、2500枚制限を維持しつつ
+            // ユーザー確認ダイアログをスキップする
+            saveControl.options.confirm = (status, cb) => {
+              const count = status._tilesforSave?.length || 0;
+              if (count > 2500) {
+                ui.showError(`${name}: 枚数が多すぎます(${count}枚)。範囲を狭めてください。`);
+                aborted = true;
+                done();
+                return;
+              }
+              cb();
+            };
+
+            saveControl._saveTiles();
+          });
+        }
+
+        saveControl.options.confirm = origConfirm;
+        saveControl._loadTile = origLoadTile;
+        saveControl._saveTile = origSaveTile;
+        if (activeBaseTileLayer) saveControl.setLayer(activeBaseTileLayer);
+        if (!aborted) ui.showComplete('全レイヤーの保存が完了しました。');
+        StorageManager.updateStorageInfo();
+      });
+
+      const container = L.DomUtil.create('div', 'leaflet-bar');
+      container.appendChild(btn);
+      return container;
+    },
+  });
+  new SaveAllControl({ position: 'topleft' }).addTo(map);
   map.on('moveend zoomend', () => MapStateManager.save(map));
 
-  // 8. オーバーレイとその他のUI
-  layerControl.addOverlay(createGsiVectorOverlay(), "道路（オンライン）");
+  // 7. オーバーレイと補助コントロール
+  layerControl.addOverlay(createGsiVectorOverlay(), '道路（オンライン時のみ）');
+  layerControl.addOverlay(createGsiPlaceNameOverlay(), '地名（オンライン時のみ）');
   L.control.scale({ imperial: false }).addTo(map);
-  
-  // 9. ストレージ管理と永続化
+
+  // 8. ストレージ管理
   StorageManager.updateStorageInfo();
-  StorageManager.requestPersistence(); 
-  
+  StorageManager.requestPersistence();
+
+  // 9. 保存エリア表示・オフラインレイヤー管理
+  setupStorageAreaOverlay(map, baseLayers, groupLayers);
+  setupOfflineLayerList(map, baseLayers, groupLayers);
+
   window.map = map;
   return map;
 }

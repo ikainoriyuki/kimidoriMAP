@@ -1,152 +1,156 @@
 import { updateElevation } from './utils.js';
 
-let currentLocation = null;
-let mapCenterLocation = null;
+// ============================================================
+// positioning.js — 現在地の測位と座標・標高の表示
+// ============================================================
 
 export function initPositioning(map) {
-  // ------------------------------
-  // 現在地の表示
-  // ------------------------------
+  // --- DOM参照 ---
+  const el = {
+    currentLat:          document.getElementById('currentLat'),
+    currentLng:          document.getElementById('currentLng'),
+    currentElevation:    document.getElementById('currentElevation'),
+    mapCenterLat:        document.getElementById('mapCenterLat'),
+    mapCenterLng:        document.getElementById('mapCenterLng'),
+    mapCenterElevation:  document.getElementById('mapCenterElevation'),
+    distance:            document.getElementById('distance'),
+    elevationDiff:       document.getElementById('elevationDifference'),
+    slopeDegree:         document.getElementById('slopeDegree'),
+    locationBtn:         document.getElementById('currentLocationControl'),
+  };
 
-  // --- DOMと変数 ---
-  // 現在地
-  const currentLatElement = document.getElementById('currentLat');
-  const currentLngElement = document.getElementById('currentLng');
-  const currentElevationElement = document.getElementById('currentElevation');
+  // --- 状態 ---
+  // elevation: undefined=未取得, null=取得失敗/N/A, number=成功
+  let currentLocation    = null; // { lat, lng, elevation }
+  let mapCenterLocation  = null;
+  let locationMarker     = null;
+  let accuracyCircle     = null;
 
-  // 画面の中心
-  const mapCenterLatElement = document.getElementById('mapCenterLat');
-  const mapCenterLngElement = document.getElementById('mapCenterLng');
-  const mapCenterElevationElement = document.getElementById('mapCenterElevation');
-
-  // 距離計測と標高差と傾斜角
-  const distanceElement = document.getElementById('distance');
-  const elevationDifferenceElement = document.getElementById('elevationDifference');
-  const slopePercentageElement = document.getElementById('slopePercentage');
-  const slopeDegreeElement = document.getElementById('slopeDegree');
-
-  // 現在地に移動
-  const currentLocationBtn = document.getElementById('currentLocationControl');
-
-  let currentLocationMarker = null; // 現在地マーカー
-  let currentAccuracyCircle = null; // 精度円
-
-  // --- イベントリスナーと関数 ---
-  // 現在地測位の開始
-  startGeolocationWatch();
-  
-  // 地図移動時の中心座標更新
-  map.on('moveend', updateMapCenter);
-  
-  // 現在地へ移動ボタンのクリックイベント
-  currentLocationBtn.addEventListener('click', function() {
-    if (currentLocationMarker) {
-      const latlng = currentLocationMarker.getLatLng();
-      map.setView(latlng, map.getZoom() < 16 ? 16 : map.getZoom());
-    } else {
-      alert("現在地情報がまだ取得されていません。");
-    }
-  });
-
-  // --- 内部関数 ---
-  // 距離と標高差の計算（現在地－画面の中心）
-  function updateCalculations() {
-    if (currentLocation && currentLocation.elevation !== null && mapCenterLocation && mapCenterLocation.elevation !== null) {
-      const distanceMeters = L.latLng(currentLocation.lat, currentLocation.lng).distanceTo(L.latLng(mapCenterLocation.lat, mapCenterLocation.lng));
-      const elevationDifference = mapCenterLocation.elevation - currentLocation.elevation;
-      let degrees = 0;
-      let percentages = 0;
-
-      if (distanceMeters > 0) {
-        // Math.atanでラジアンを求め、(180 / Math.PI) を掛けて度（°）に変換
-        const radians = Math.atan(elevationDifference / distanceMeters);
-        degrees = radians * (180 / Math.PI);
-        percentages = (elevationDifference / distanceMeters) * 100;
-      }
-
-      distanceElement.textContent = `${(distanceMeters).toFixed(0)} m`;
-      elevationDifferenceElement.textContent = `${elevationDifference.toFixed(0)} m`;
-      slopeDegreeElement.textContent = `${degrees.toFixed(0)} °`;
-      slopePercentageElement.textContent = `${percentages.toFixed(0)} %`;
-    }
+  // ============================================================
+  // 距離の更新（lat/lng のみで計算、オフラインでも動作）
+  // ============================================================
+  function updateDistance() {
+    if (!currentLocation || !mapCenterLocation) return;
+    const dist = L.latLng(currentLocation.lat, currentLocation.lng)
+                  .distanceTo(L.latLng(mapCenterLocation.lat, mapCenterLocation.lng));
+    el.distance.textContent = `${dist.toFixed(0)} m`;
   }
 
-  // 画面の中心の座標
+  // ============================================================
+  // 標高差・傾斜角の更新（標高 API 応答後に呼ぶ）
+  // ============================================================
+  function updateCalculations() {
+    const ce = currentLocation?.elevation;
+    const me = mapCenterLocation?.elevation;
+    if (ce === undefined || me === undefined) return; // まだ取得中
+    if (ce === null || me === null) {
+      el.elevationDiff.textContent = 'Error';
+      el.slopeDegree.textContent   = 'Error';
+      return;
+    }
+    const dist = L.latLng(currentLocation.lat, currentLocation.lng)
+                  .distanceTo(L.latLng(mapCenterLocation.lat, mapCenterLocation.lng));
+    const dh   = me - ce;
+    const deg  = dist > 0 ? Math.atan(dh / dist) * (180 / Math.PI) : 0;
+    el.elevationDiff.textContent = `${dh.toFixed(0)} m`;
+    el.slopeDegree.textContent   = `${deg.toFixed(0)} °`;
+  }
+
+  // ============================================================
+  // 画面中央の座標更新（地図移動時）
+  // ============================================================
   function updateMapCenter() {
     const center = map.getCenter();
-    mapCenterLocation = { lat: center.lat, lng: center.lng, elevation: null };
-    mapCenterLatElement.textContent = center.lat.toFixed(5);
-    mapCenterLngElement.textContent = center.lng.toFixed(5);
-    updateElevation(center.lat, center.lng, mapCenterElevationElement, (elevation) => {
-        mapCenterLocation.elevation = elevation;
-        updateCalculations();
-    });
-  }
-
-  // 現在地の座標
-  function updateCurrentLocation(position) {
-    const lat = position.coords.latitude;
-    const lng = position.coords.longitude;
-    const accuracy = position.coords.accuracy;
-    const latlng = L.latLng(lat, lng);
-    currentLocation = { lat, lng, elevation: null };
-    currentLatElement.textContent = lat.toFixed(5);
-    currentLngElement.textContent = lng.toFixed(5);
-    
-    if (!currentLocationMarker) {
-      currentLocationMarker = L.circleMarker(latlng, {
-        radius: 8, fillColor: '#0070FF', color: '#FFFFFF', weight: 2, opacity: 1, fillOpacity: 0.8
-      }).addTo(map);
-        
-      map.setView(latlng, 16); 
-      
-      currentAccuracyCircle = L.circle(latlng, {
-          radius: accuracy, color: '#136AEC', fillColor: '#136AEC', fillOpacity: 0.15, weight: 1, opacity: 0.2
-      }).addTo(map);
-
-      // 現在地移動ボタンの点滅をストップ
-      currentLocationBtn.classList.remove('locating');
-
-    } else {
-      currentLocationMarker.setLatLng(latlng);
-      currentAccuracyCircle.setLatLng(latlng).setRadius(accuracy);
-    }
-    
-    updateElevation(lat, lng, currentElevationElement, (elevation) => {
-      currentLocation.elevation = elevation;
+    mapCenterLocation = { lat: center.lat, lng: center.lng, elevation: undefined };
+    el.mapCenterLat.textContent = center.lat.toFixed(5);
+    el.mapCenterLng.textContent = center.lng.toFixed(5);
+    updateDistance();
+    updateElevation(center.lat, center.lng, el.mapCenterElevation, elev => {
+      mapCenterLocation.elevation = elev;
       updateCalculations();
     });
   }
 
-  // 現在地測位の開始
-  function startGeolocationWatch() {
-    if ('geolocation' in navigator) {
-      currentLocationBtn.classList.add('locating');
+  // ============================================================
+  // 現在地の座標更新（測位コールバック）
+  // ============================================================
+  function updateCurrentLocation(position) {
+    const { latitude: lat, longitude: lng, accuracy } = position.coords;
+    const latlng = L.latLng(lat, lng);
 
-      const options = {
-        enableHighAccuracy: true, timeout: 30000, maximumAge: 0
-      };  
-          
-      navigator.geolocation.watchPosition(
-        (position) => {
-          updateCurrentLocation(position);
-        },
-        (error) => {
-          console.error('Geolocation Error:', error);
-          // エラー時のUI更新ロジック
-          currentLocationBtn.classList.remove('locating');
-        },
-          options
-      );
+    currentLocation = { lat, lng, elevation: undefined };
+    el.currentLat.textContent = lat.toFixed(5);
+    el.currentLng.textContent = lng.toFixed(5);
+
+    if (!locationMarker) {
+      // 初回取得：マーカーと精度円を生成して地図を移動
+      locationMarker = L.circleMarker(latlng, {
+        radius: 8, fillColor: '#0070ff', color: '#ffffff',
+        weight: 2, opacity: 1, fillOpacity: 0.8,
+      }).addTo(map);
+
+      accuracyCircle = L.circle(latlng, {
+        radius: accuracy, color: '#136aec', fillColor: '#136aec',
+        fillOpacity: 0.15, weight: 1, opacity: 0.2,
+      }).addTo(map);
+
+      map.setView(latlng, 16);
+      el.locationBtn.classList.remove('locating');
     } else {
-      alert("このブラウザは位置情報サービスに対応していません。");
+      locationMarker.setLatLng(latlng);
+      accuracyCircle.setLatLng(latlng).setRadius(accuracy);
     }
+
+    updateDistance();
+    updateElevation(lat, lng, el.currentElevation, elev => {
+      currentLocation.elevation = elev;
+      updateCalculations();
+    });
   }
 
-  // POI Managerから使用できるように現在地情報を返す関数
+  // ============================================================
+  // 測位開始
+  // ============================================================
+  function startWatchPosition() {
+    if (!('geolocation' in navigator)) {
+      alert('このブラウザは位置情報サービスに対応していません。');
+      return;
+    }
+
+    el.locationBtn.classList.add('locating');
+
+    navigator.geolocation.watchPosition(
+      updateCurrentLocation,
+      err => {
+        console.error('測位エラー:', err);
+        el.locationBtn.classList.remove('locating');
+      },
+      { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+    );
+  }
+
+  // ============================================================
+  // イベント登録
+  // ============================================================
+  map.on('moveend', updateMapCenter);
+
+  el.locationBtn.addEventListener('click', () => {
+    if (locationMarker) {
+      const latlng = locationMarker.getLatLng();
+      map.setView(latlng, Math.max(map.getZoom(), 16));
+    } else {
+      alert('現在地情報がまだ取得されていません。');
+    }
+  });
+
+  startWatchPosition();
+
+  // ============================================================
+  // POIManagerへの公開インターフェース
+  // ============================================================
   return {
-    getCurrentLocation: () => currentLocation,
-    getMapCenterLocation: () => mapCenterLocation,
-    getCurrentLocationMarker: () => currentLocationMarker,
+    getCurrentLocation:       () => currentLocation,
+    getMapCenterLocation:     () => mapCenterLocation,
+    getCurrentLocationMarker: () => locationMarker,
   };
 }

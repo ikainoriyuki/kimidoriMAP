@@ -1,498 +1,1117 @@
-body {
-    margin: 0;
-    padding: 0;
-}
-html, body, #map{
-    width: 100%;
-    height: 100%;
-}
-/* 中央に十字マークを配置 */
-.crosshair {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 20px;
-    height: 20px;
-    margin-top: -10px;
-    margin-left: -10px;
-    background-image: url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><line x1="0" y1="50" x2="100" y2="50" stroke="white" stroke-width="20"/><line x1="50" y1="0" x2="50" y2="100" stroke="white" stroke-width="20"/><line x1="0" y1="50" x2="100" y2="50" stroke="blue" stroke-width="10"/><line x1="50" y1="0" x2="50" y2="100" stroke="blue" stroke-width="10"/></svg>');
-    pointer-events: none;
-    z-index: 1000;
+/* ============================================================
+   style.css — きみどりマップ
+   ============================================================ */
+
+/* ----------------------------------------------------------
+   CSS変数（デザイントークン）
+   ---------------------------------------------------------- */
+:root {
+  /* ブランドカラー */
+  --color-forest:        #1a5c35;   /* 森林グリーン（アクセント） */
+  --color-forest-dark:   #0f3d23;
+  --color-forest-light:  #e8f5ee;
+
+  /* 汎用カラー */
+  --color-primary:   #1a6fc4;
+  --color-danger:    #c0392b;
+  --color-danger-bg: #fdf0ef;
+  --color-success:   #1e7e44;
+  --color-muted:     #5a6575;
+  --color-bg-white:  #ffffff;
+  --color-border:    #d8dde3;
+  --color-shadow:    rgba(0, 0, 0, 0.65);
+
+  /* ボタン共通 */
+  --btn-radius:      8px;
+  --btn-font-size:   0.9rem;
+  --btn-padding:     10px 18px;
+  --btn-transition:  background-color 0.15s, box-shadow 0.15s, transform 0.1s;
+
+  /* テキストシャドウ（地図上の文字に白縁を付ける） */
+  --text-shadow-white:
+    -1px -1px 0 white,
+     1px -1px 0 white,
+    -1px  1px 0 white,
+     1px  1px 0 white;
 }
 
-/* 現在地移動ボタンのコンテナスタイル */
+/* ----------------------------------------------------------
+   基本レイアウト
+   ---------------------------------------------------------- */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#map {
+  position: absolute;
+  top: 50px;
+  bottom: 0;
+  width: 100%;
+}
+
+/* ----------------------------------------------------------
+   ナビバー
+   ---------------------------------------------------------- */
+.navbar-coords {
+  font-size: 0.7rem;
+  line-height: 1.2;
+}
+
+/* ----------------------------------------------------------
+   RECボタン（画面下部の録点ボタン）
+   ---------------------------------------------------------- */
+.btn-rec {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 11px 20px;
+  border: none;
+  border-radius: 24px;
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 0.9rem;
+  letter-spacing: 0.04em;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
+  transition: var(--btn-transition);
+  user-select: none;
+}
+
+.btn-rec:active {
+  transform: scale(0.95);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+
+/* 画面中央REC（白地に赤文字） */
+.btn-rec--center {
+  background-color: var(--color-bg-white);
+  color: var(--color-danger);
+  border: 2px solid var(--color-danger);
+}
+.btn-rec--center:hover { background-color: var(--color-danger-bg); }
+
+/* 現在地REC（赤塗り） */
+.btn-rec--current {
+  background-color: var(--color-danger);
+  color: white;
+  border: 2px solid var(--color-danger);
+}
+.btn-rec--current:hover { background-color: #962d22; border-color: #962d22; }
+
+.btn-rec__icon  { font-size: 1.1rem; line-height: 1; }
+.btn-rec__label { font-size: 0.8rem; }
+
+/* ----------------------------------------------------------
+   画面中央の十字マーク
+   ---------------------------------------------------------- */
+.crosshair {
+  position: absolute;
+  top: calc(50% + 25px);
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  margin-top: -10px;
+  margin-left: -10px;
+  background-image: url('data:image/svg+xml;charset=utf-8,\
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">\
+      <line x1="0" y1="50" x2="100" y2="50" stroke="white" stroke-width="20"/>\
+      <line x1="50" y1="0" x2="50" y2="100" stroke="white" stroke-width="20"/>\
+      <line x1="0" y1="50" x2="100" y2="50" stroke="blue"  stroke-width="10"/>\
+      <line x1="50" y1="0" x2="50" y2="100" stroke="blue"  stroke-width="10"/>\
+    </svg>');
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* ----------------------------------------------------------
+   現在地移動ボタン
+   ---------------------------------------------------------- */
 #currentLocationControl {
-    position: absolute;
-    top: 150px; /* 既存の座標表示エリアやボタン行の上になるように調整 */
-    right: 15px;
-    z-index: 999;
-    width: 40px;
-    height: 40px;
-    line-height: 40px; /* アイコンを垂直方向に中央寄せ */
-    text-align: center;
-    background-color: #fff;
-    border-radius: 4px;
-    box-shadow: 0 1px 5px rgba(0,0,0,0.65);
-    cursor: pointer;
-    font-size: 18px;
-    color: #333;
-    transition: background-color 0.3s;
+  position: absolute;
+  /* leaflet zoom コントロール(2ボタン×30px + 余白)の下 */
+  top: 50%;
+  right: 10px;
+  z-index: 999;
+  width: 40px;
+  height: 40px;
+  line-height: 40px;
+  text-align: center;
+  background-color: var(--color-bg-white);
+  border-radius: 4px;
+  box-shadow: 0 1px 5px var(--color-shadow);
+  cursor: pointer;
+  font-size: 18px;
+  color: #333;
+  transition: background-color 0.3s;
 }
 
 #currentLocationControl:hover {
-    background-color: #f4f4f4;
+  background-color: #f4f4f4;
 }
 
-/* アイコンの色を設定 */
-#currentLocationControl .fa-location-arrow {
-    color: #007bff; /* 青色 */
+#currentLocationControl svg {
+  color: var(--color-primary);
 }
 
-/* 測位中は現在地移動ボタンのアイコン内の矢印を点滅させる */
-@keyframes blink {
-    0% { color: #007bff; opacity: 1; } /* 濃い青で完全に表示 */
-    50% { color: #00FFFF; opacity: 0.3; } /* 明るい水色で薄くする */
-    100% { color: #007bff; opacity: 1; }
-}
-
-/* 測位中のボタンに適用するスタイル */
+/* 測位中：背景色を水色に */
 #currentLocationControl.locating {
-    background-color: #f0f8ff; /* 測位中は背景を薄い水色にする */
+  background-color: #f0f8ff;
 }
 
-/* アイコンに点滅アニメーションを適用 */
-#currentLocationControl.locating .fa-location-arrow {
-    animation: blink 1.5s ease-in-out infinite; /* 1.5秒で滑らかに点滅を繰り返す */
+/* 測位中：アイコンを点滅 */
+#currentLocationControl.locating svg {
+  animation: blink 1.5s ease-in-out infinite;
 }
 
-/* leaflet.offline */
-/* 保存タイルコントロールの位置を右端中央に */
-.leaflet-control-savetiles {
-  position: absolute !important;
-  right: 100px;          /* 右端からの距離 */
-  top: 50%;             /* 画面中央に配置 */
-  transform: translateY(-50%); /* 縦方向中央寄せ */
-  z-index: 1000;        /* 他のアイコンより前面に */
+@keyframes blink {
+  0%   { color: var(--color-primary); opacity: 1; }
+  50%  { color: #00ffff;              opacity: 0.3; }
+  100% { color: var(--color-primary); opacity: 1; }
 }
 
-/* ボタンの見た目を調整 */
+/* ----------------------------------------------------------
+   サイドメニュー幅（SP: 75vw / PC: 320px固定）
+   ---------------------------------------------------------- */
+/* width を直接指定（CSS変数経由では!importantが効かないため） */
+.offcanvas-sidebar {
+  width: min(75vw, 320px) !important;
+}
+
+/* ----------------------------------------------------------
+   leaflet.offline — タイル保存コントロール（標準位置に戻す）
+   ---------------------------------------------------------- */
 .leaflet-control-savetiles a {
-  font-size: 20px;      /* アイコンを大きめに */
+  font-size: 20px;
   line-height: 30px;
   text-align: center;
 }
 
-.label {
-    font-size: 15px;
-    text-align: center;
-    font-weight: bold;
-    text-shadow: 
-    -1px -1px 0 white, /* 左上 */
-    1px -1px 0 white, /* 右上 */
-    -1px 1px 0 white, /* 左下 */
-    1px 1px 0 white;  /* 右下 */
+/* ----------------------------------------------------------
+   地理院ベクター 地名ラベル
+   ---------------------------------------------------------- */
+.gsi-place-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #222;
+  white-space: nowrap;
+  text-shadow: var(--text-shadow-white);
+  pointer-events: none;
 }
 
-.makerPoint {
-    width: 1px;
-    height: 1px;
-    border-radius: 10px;
-    border: 1px solid #fdfdfd;
-    background-color: rgb(70, 70, 70);
-}
-
-.labelPoint {
-    white-space: nowrap; /* 横書きで改行を防ぐ */
-    font-size: 15px;
-    text-align: right;
-    font-weight: bold;
-    padding: 10px;
-    z-index: 1000;
-    position: absolute;
-    text-shadow: 
-    -1px -1px 0 white, /* 左上 */
-    1px -1px 0 white, /* 右上 */
-    -1px 1px 0 white, /* 左下 */
-    1px 1px 0 white;  /* 右下 */
-}
-
-/* ツールチップのデフォルトスタイルを上書き */
+/* ----------------------------------------------------------
+   地図上のラベル（GeoJSONレイヤー用）
+   ---------------------------------------------------------- */
 .leaflet-tooltip.my-label-tooltip {
-    background-color: transparent;
-    border: none;
-    box-shadow: none;
-    font-weight: bold;
-    color: #333;
-    padding: 0; /* 余計なパディングを削除 */
-    text-shadow: 
-    -1px -1px 0 white, /* 左上 */
-    1px -1px 0 white, /* 右上 */
-    -1px 1px 0 white, /* 左下 */
-    1px 1px 0 white;  /* 右下 */
-}
-
-
-/* スライドメニュー */
-.menu {
-    position: fixed;
-    top: 0;
-    left: -300px;
-    width: 300px;
-    height: 100vh;
-    background-color: transparent;
-    color: darkslategray;
-    padding: 20px;
-    transition: transform 0.3s;
-    z-index: 1200;
-
-    overflow-y: auto;        
-    overflow-x: hidden;
-    box-sizing: border-box;
-}
-.menu.open {
-    transform: translateX(300px);
-    background-color: rgba(255,255,255,0.75); /*透過率25% */
-    z-index: 1200;
-}
-
-.menu p:last-child {
-    margin-bottom: 40px;
-}
-
-/* スクロールバーのデザインを少し細くしてスッキリさせる */
-.menu::-webkit-scrollbar {
-    width: 6px;
-}
-.menu::-webkit-scrollbar-thumb {
-    background-color: rgba(0, 0, 0, 0.2);
-    border-radius: 10px;
-}
-
-/* 見出しをクリック可能にする */
-.menu h2 {
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 5px;
-    border-bottom: 1px solid rgba(0,0,0,0.1);
-    margin-bottom: 5px;
-}
-
-/* 矢印アイコンの向き */
-.menu h2::after {
-    content: '▶';
-    font-size: 0.8em;
-    transition: transform 0.3s;
-}
-
-.menu h2.active::after {
-    transform: rotate(90deg); /* 開いている時は下向き */
-}
-
-/* 中身の初期状態を非表示にする */
-.accordion-content {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease-out;
-    padding-left: 10px;
-}
-
-/* 開いた時の状態 */
-.accordion-content.show {
-    max-height: 500px; /* 十分な高さを設定 */
-    margin-bottom: 15px;
-}
-
-.toggleBtn {
-    position: fixed;
-    top: 50%;
-    left: 10px;
-    width : 20px;
-    height: 20px;
-
-    display: flex; /* Flexbox レイアウトを使用 */
-    align-items: center; /* 垂直方向の中央揃え */
-    justify-content: center; /* 水平方向の中央揃え */
-    
-    background-color: darkgreen;
-    color: white;
-    border: 1px solid gray;
-    padding: 10px;
-    cursor: pointer;
-    z-index: 1000;
-}
-.closeBtn {
-    position: relative;
-    top: 10px;
-    right: auto;
-    font-size: 24px;
-    cursor: pointer;
-    color: darkslategray;
-}
-.menuBtn {
-    background-color: lavender; /* 背景色を白色に設定 */
-    color: darkslategray;
-    padding: 10px 10px;
-    border: 1px;
-    border-radius: 5px; /* 角を丸くする */
-    font-size: 15px;
-    cursor: pointer;
-}
-
-/* ---ラベル選択--- */
-
-
-.label-select {
-  width: 50%;
-  max-width: 320px;
-  padding: 10px 1px;
-  font-size: 14px;
+  background-color: transparent;
   border: none;
-  border-radius: 12px;
-  background: rgba(175, 219, 255, 0.5);
-  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-  appearance: none;
-  text-align: center;
-  margin: 0 auto 20px auto;
-
+  box-shadow: none;
+  padding: 0;
+  font-weight: bold;
+  color: #333;
+  text-shadow: var(--text-shadow-white);
 }
 
+/* ----------------------------------------------------------
+   読み込みファイル一覧
+   ---------------------------------------------------------- */
+.layer-list {
+  margin-bottom: 12px;
+}
 
-
-/* ---配置--- */
-#bottom-container {
-  position: fixed;
-  bottom: 35px;
-  left: 10px;
-  right: 10px;
+.layer-item {
   display: flex;
   flex-direction: column;
-  gap: 0px;
-  z-index: 1000;
+  gap: 0;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  background: #f8f9fb;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 0.82rem;
 }
 
-#button-row {
+/* 上段：チェック・ファイル名・カラーピッカー・削除 */
+.layer-item__row {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
   width: 100%;
 }
 
-#coordinate-text {
-  color: rgb(0, 0, 0);
-  background-color: rgba(255,255,255, 0.5);
-  font-size: 12px;
-  text-shadow: 
-    -1px -1px 0 white, /* 左上 */
-    1px -1px 0 white, /* 右上 */
-    -1px 1px 0 white, /* 左下 */
-    1px 1px 0 white;  /* 右下 */
-  padding: 5px 10px;
+/* 下段：ラベル選択UI（展開時） */
+.layer-item__label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--color-border);
+  width: 100%;
+}
+
+.layer-item__label-select {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 0.78rem;
+  border: 1px solid var(--color-border);
   border-radius: 5px;
-  align-self: flex-start;
-}
-
-button {
-    /* transform: translateX(-50%); */
-    padding: 10px 20px;
-    background-color: red;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    text-align: center;
-    z-index: 100;
+  background: white;
 }
 
 
-/* バルーンのスタイル */
+
+/* ファイル名：はみ出したら省略 */
+.layer-item__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #333;
+  min-width: 0;
+}
+
+/* タップで移動できるファイル名 */
+.layer-item__name--link {
+  cursor: pointer;
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.15s, color 0.15s;
+}
+.layer-item__name--link:hover {
+  text-decoration-color: var(--color-primary);
+}
+
+/* カラーピッカー */
+.layer-item__color {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
+  background: none;
+  flex-shrink: 0;
+}
+
+/* 削除ボタン */
+.layer-item__delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  background: none;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+.layer-item__delete:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+/* コピーボタン行 */
+.layer-item__copy-row {
+  padding: 4px 0 2px;
+}
+.layer-item__copy-btn {
+  width: 100%;
+  padding: 5px 8px;
+  font-size: 0.8rem;
+  background: #e8f5e9;
+  color: #004926;
+  border: 1px solid #a5d6a7;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.layer-item__copy-btn:hover {
+  background: #c8e6c9;
+}
+.layer-item__copy-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .popup-content {
-    font-size: 15px; /* 文字サイズを大きく設定 */
+  font-size: 14px;
+  line-height: 1.6;
+  color: #333;
+  margin-bottom: 8px;
 }
 
-/* バルーン内の編集・削除ボタン用のスタイル */
-.edit-button {
-    padding: 10px 20px;
-    font-size: 14px;
-    border-radius: 5px;
-    background-color: #28a745; /* 編集ボタンの色 (緑) */
-    color: white;
-    border: none;
-    cursor: pointer;
+/* 編集・削除ボタン行 */
+.popup-buttons {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 0;
 }
+
+/* ポップアップ内ボタン（共通ベース） */
+.edit-button,
+.delete-button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--btn-radius);
+  border: none;
+  cursor: pointer;
+  transition: var(--btn-transition);
+}
+
+.edit-button {
+  background-color: var(--color-success);
+  color: white;
+}
+.edit-button:hover   { background-color: #166035; }
 
 .delete-button {
-    padding: 10px 20px;
-    font-size: 14px;
-    border-radius: 5px;
-    background-color: #dc3545; /* 削除ボタンの色 (赤) */
-    color: white;
-    border: none;
-    cursor: pointer;
+  background-color: var(--color-danger);
+  color: white;
+}
+.delete-button:hover { background-color: #962d22; }
+
+/* ----------------------------------------------------------
+   POI登録・編集モーダル
+   ---------------------------------------------------------- */
+.poi-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.55);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  /* display:none をJSで上書きするため、flexはJS側で設定 */
 }
 
-/* PWAバナーのスタイル */
+.poi-modal-dialog {
+  background-color: var(--color-bg-white);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 360px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+/* ヘッダー帯（森林グリーン） */
+.poi-modal-header {
+  background-color: var(--color-forest);
+  padding: 14px 18px;
+}
+
+.poi-modal-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: white;
+  letter-spacing: 0.02em;
+}
+
+/* フォーム本体 */
+.poi-modal-body {
+  padding: 18px 18px 0;
+}
+
+.poi-modal-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.poi-modal-field       { flex: 1; }
+.poi-modal-field--wide { flex: 2; }
+
+.poi-modal-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  margin-bottom: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.poi-modal-input {
+  width: 100%;
+  padding: 9px 10px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--color-border);
+  border-radius: 7px;
+  font-size: 1rem;
+  background-color: #f8f9fb;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.poi-modal-input:focus {
+  outline: none;
+  border-color: var(--color-forest);
+  background-color: var(--color-bg-white);
+  box-shadow: 0 0 0 3px rgba(26, 92, 53, 0.15);
+}
+
+.poi-modal-textarea {
+  resize: vertical;
+  min-height: 70px;
+  margin-bottom: 0;
+}
+
+/* ライン記録中インジケーター（ナビバー直下・中央） */
+#line-mode-indicator {
+  position: fixed;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1002;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--color-forest);
+  color: white;
+  border-radius: 0 0 12px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  animation: none;
+}
+
+.line-finish-btn {
+  background: rgba(255,255,255,0.25);
+  border: 1px solid rgba(255,255,255,0.6);
+  color: white;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 12px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 分割モードインジケーター */
+#split-mode-indicator {
+  position: fixed;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1002;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: #b5541a;
+  color: white;
+  border-radius: 0 0 12px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 頂点編集中インジケーター */
+#vertex-edit-indicator {
+  position: fixed;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1002;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: #7b5ea7;
+  color: white;
+  border-radius: 0 0 12px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+#vertex-edit-indicator .line-finish-btn {
+  margin-left: 4px;
+}
+
+.vertex-edit-mode-btn.active {
+  outline: 2px solid white;
+  outline-offset: 1px;
+}
+
+@keyframes pulse-green {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+/* ポップアップ内のライン操作ボタン */
+.line-start-button,
+.line-via-button,
+.line-end-button {
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--btn-radius);
+  border: none;
+  cursor: pointer;
+  transition: var(--btn-transition);
+}
+
+/* 経由・完了は横並びのため幅auto */
+.line-start-button { width: 100%; }
+
+.line-start-button {
+  background-color: var(--color-forest);
+  color: white;
+}
+.line-start-button:hover { background-color: var(--color-forest-dark); }
+
+.line-via-button {
+  background-color: #1a6fc4;
+  color: white;
+}
+.line-via-button:hover { background-color: #155aa0; }
+
+.line-end-button {
+  width: 100%;
+  background-color: #e8813a;
+  color: white;
+}
+.line-end-button:hover { background-color: #c96a2a; }
+
+/* ラインポップアップ内：頂点編集ボタン */
+.line-vertex-edit-button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--btn-radius);
+  border: none;
+  cursor: pointer;
+  transition: var(--btn-transition);
+  background-color: #7b5ea7;
+  color: white;
+}
+.line-vertex-edit-button:hover { background-color: #634a88; }
+
+/* ポリゴン分割ボタン */
+.split-button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--btn-radius);
+  border: none;
+  cursor: pointer;
+  transition: var(--btn-transition);
+  background-color: #e07b39;
+  color: white;
+}
+.split-button:hover { background-color: #c0622a; }
+
+/* 頂点削除モード — ラインポップアップ内ボタン */
+.line-vertex-delete-button {
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--btn-radius);
+  border: none;
+  cursor: pointer;
+  transition: var(--btn-transition);
+  background-color: #7b5ea7;
+  color: white;
+}
+.line-vertex-delete-button:hover { background-color: #634a88; }
+
+/* 頂点削除モード — POIポップアップ内ボタン */
+.line-vertex-remove-button {
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--btn-radius);
+  border: none;
+  cursor: pointer;
+  transition: var(--btn-transition);
+  background-color: var(--color-danger);
+  color: white;
+}
+.line-vertex-remove-button:hover { background-color: #962d22; }
+
+/* 頂点削除モードバッジ */
+.vertex-delete-mode-badge {
+  background: #7b5ea7;
+  gap: 6px;
+}
+
+.vertex-delete-cancel-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.8;
+  min-width: 30px;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* アクションボタン行 */
+.poi-modal-actions {
+  display: flex;
+  gap: 0;
+  border-top: 1px solid var(--color-border);
+  margin-top: 18px;
+}
+
+.poi-modal-btn {
+  flex: 1;
+  padding: 14px 10px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 700;
+  transition: var(--btn-transition);
+  letter-spacing: 0.02em;
+}
+
+.poi-modal-btn--cancel {
+  background-color: var(--color-bg-white);
+  color: var(--color-muted);
+  border-right: 1px solid var(--color-border);
+  border-radius: 0 0 0 14px;
+}
+.poi-modal-btn--cancel:hover { background-color: #f3f4f6; }
+
+.poi-modal-btn--save {
+  background-color: var(--color-forest);
+  color: white;
+  border-radius: 0 0 14px 0;
+}
+.poi-modal-btn--save:hover   { background-color: var(--color-forest-dark); }
+
+/* ----------------------------------------------------------
+   PWAバナー（Android/Chrome）
+   ---------------------------------------------------------- */
 .pwa-banner {
-    position: fixed;
-    top: 10px; /* 上から出す場合（下なら bottom: 0） */
-    left: 50%;
-    transform: translateX(-50%);
-    width: 95%;
-    max-width: 450px;
-    background: rgba(255, 255, 255, 0.95);
-    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-    border-radius: 12px;
-    z-index: 9999;
-    padding: 10px 15px;
-    backdrop-filter: blur(5px);
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 95%;
+  max-width: 450px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  z-index: 9999;
+  padding: 10px 15px;
+  backdrop-filter: blur(5px);
 }
 
 .pwa-banner-content {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .pwa-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
 }
 
 .pwa-text {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
 }
 
-.pwa-text strong {
-    font-size: 14px;
-}
-
-.pwa-text span {
-    font-size: 11px;
-    color: #666;
-}
+.pwa-text strong { font-size: 14px; }
+.pwa-text span   { font-size: 11px; color: #666; }
 
 .pwa-btn {
-    background-color: #007AFF; /* iOS/Safari風の青 */
-    color: white;
-    border: none;
-    padding: 6px 15px;
-    border-radius: 20px;
-    font-weight: bold;
-    cursor: pointer;
+  background-color: #007aff;
+  color: white;
+  border: none;
+  padding: 6px 15px;
+  border-radius: 20px;
+  font-weight: bold;
+  cursor: pointer;
 }
 
 .pwa-close {
-    font-size: 20px;
-    color: #999;
-    padding-left: 5px;
-    cursor: pointer;
+  font-size: 20px;
+  color: #999;
+  padding-left: 5px;
+  cursor: pointer;
 }
 
-/* iOS用のPWA誘導バナー */
+/* ----------------------------------------------------------
+   PWA誘導バナー（iOS Safari）
+   ---------------------------------------------------------- */
 .ios-prompt {
-    position: fixed;
-    bottom: 30px; /* iPhoneの共有ボタン付近を指すように調整 */
-    left: 50%;
-    transform: translateX(-50%);
-    width: 90%;
-    max-width: 350px;
-    z-index: 10000;
-    animation: fadeInUp 0.5s ease-out;
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 350px;
+  z-index: 10000;
+  animation: fadeInUp 0.5s ease-out;
 }
 
 .ios-prompt-content {
-    background: rgba(255, 255, 255, 0.95);
-    padding: 15px;
-    border-radius: 15px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.3);
-    backdrop-filter: blur(10px);
-    position: relative;
-    border: 1px solid #ddd;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 15px;
+  border-radius: 15px;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  position: relative;
+  border: 1px solid #ddd;
 }
 
 .ios-prompt-header {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
 }
 
 .ios-prompt p {
-    font-size: 14px;
-    color: #333;
-    line-height: 1.5;
-    margin: 0;
+  font-size: 14px;
+  color: #333;
+  line-height: 1.5;
+  margin: 0;
 }
 
 .ios-close {
-    font-size: 20px;
-    color: #999;
-    cursor: pointer;
+  font-size: 20px;
+  color: #999;
+  cursor: pointer;
 }
 
-/* 下向きの矢印（共有ボタンを指す） */
+/* 下向き矢印（共有ボタンを指す） */
 .ios-prompt-arrow {
-    position: absolute;
-    bottom: -10px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 0;
-    height: 0;
-    border-left: 10px solid transparent;
-    border-right: 10px solid transparent;
-    border-top: 10px solid rgba(255, 255, 255, 0.95);
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 10px solid rgba(255, 255, 255, 0.95);
 }
 
 @keyframes fadeInUp {
-    from { opacity: 0; transform: translate(-50%, 20px); }
-    to { opacity: 1; transform: translate(-50%, 0); }
+  from { opacity: 0; transform: translate(-50%, 20px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
-
-/* スマートフォン用のスタイルを追加 */
+/* ----------------------------------------------------------
+   スマートフォン対応（タップ・文字サイズ調整）
+   ---------------------------------------------------------- */
 @media (max-width: 1200px) {
-    .leaflet-control-layers a,
-    .leaflet-bar a {
+  .leaflet-control-layers a,
+  .leaflet-bar a {
     font-size: 20px;
     padding: 8px;
-    }
-    
-    .leaflet-control-scale-line {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+
+  .leaflet-control-scale-line {
     font-size: 14px;
-    }
+  }
 
-    .leaflet-control-layers .leaflet-control-layers-base label,
-    .leaflet-control-layers .leaflet-control-layers-separator {
+  .leaflet-control-layers .leaflet-control-layers-base label,
+  .leaflet-control-layers .leaflet-control-layers-separator,
+  .leaflet-control-layers-overlays label {
     font-size: 18px;
     padding: 5px;
-    }
+  }
 
-    .leaflet-control-layers-overlays label {
-    font-size: 18px;
-    padding: 5px;
-    }
+  #currentLocationControl {
+    top: 50%;
+    transform: translateY(-50%);
+  }
 
-    #currentLocationControl {
-        top: 200px;
-    }
+  .leaflet-tooltip.my-label-tooltip {
+    font-size: 14px;
+  }
 
-    .leaflet-tooltip.my-label-tooltip {
-        font-size: 14px;
-    }
+  /* ポップアップ内ボタン：タップしやすいサイズに */
+  .edit-button,
+  .delete-button,
+  .line-vertex-edit-button,
+  .split-button,
+  .line-start-button,
+  .line-end-button {
+    font-size: 15px;
+    padding: 10px 16px;
+  }
 
-    button {
-    font-size: 18px;
-    padding: 10px;
-    }
-
-    #edit-btn {
-    font-size: 18px;
-    }
-    #delete-btn {
-    font-size: 18px;
-    }
-
-
+  /* RECボタン：スマートフォンでも十分な大きさに */
+  #saveCenterBtn,
+  #saveBtn {
+    font-size: 16px;
+    padding: 12px 22px;
+  }
 }
+
+/* ----------------------------------------------------------
+   オフラインマップ削除リスト
+   ---------------------------------------------------------- */
+.offline-layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.offline-layer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #f8f9fb;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  font-size: 0.82rem;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.offline-layer-row__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  color: #333;
+}
+
+.offline-layer-row__count {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.offline-layer-row__delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 13px;
+  background: none;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+.offline-layer-row__delete:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+/* ----------------------------------------------------------
+   データ一覧（POI・ライン）
+   ---------------------------------------------------------- */
+.data-list-date-header {
+  padding: 6px 14px 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--color-muted);
+  background: #f0f2f4;
+  border-bottom: 1px solid var(--color-border);
+  text-transform: uppercase;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.data-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0f2f4;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.data-list-item:hover,
+.data-list-item:active {
+  background: var(--color-forest-light);
+}
+
+.data-list-item__icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+
+.data-list-item__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.data-list-item__label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #222;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-list-item__sub {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-list-item__arrow {
+  font-size: 0.75rem;
+  color: #ccc;
+  flex-shrink: 0;
+}
+
+/* ----------------------------------------------------------
+   データ一覧 追加スタイル（折り畳み・削除・ラベルボタン）
+   ---------------------------------------------------------- */
+
+/* 日付ヘッダーをクリッカブルに */
+.data-list-date-header {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.data-list-date-header:hover { background: #e6e9ec; }
+
+.dl-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dl-date-export-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-muted);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+.dl-date-export-btn:hover { color: #198754; background: #d1e7dd; }
+
+.dl-chevron {
+  font-size: 0.7rem;
+  color: var(--color-muted);
+}
+
+/* アクションボタンエリア */
+.data-list-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* ラベルボタン（# / A） */
+.dl-label-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  background: #fff;
+  color: #555;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.dl-label-btn:hover    { background: var(--color-forest-light); border-color: var(--color-forest); }
+.dl-label-btn.active   { background: var(--color-forest); color: #fff; border-color: var(--color-forest); }
+
+/* 削除ボタン */
+.dl-del-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 0.8rem;
+  border-radius: 5px;
+  border: none;
+  background: none;
+  color: #bbb;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+.dl-del-btn:hover { color: var(--color-danger); background: var(--color-danger-bg, #fdecea); }
+
+/* POIラベル tooltip */
+.my-label-tooltip {
+  background: rgba(0, 73, 38, 0.82);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+}
+.my-label-tooltip::before { display: none; }
