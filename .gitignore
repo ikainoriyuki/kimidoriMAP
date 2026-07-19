@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# 非公開ファイル（記事草稿・Claude設定）
+article/
+CLAUDE.md
+.claude/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

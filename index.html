@@ -52,21 +52,17 @@
         <span class="navbar-toggler-icon"></span>
       </button>
 
-      <div class="ms-auto d-flex align-items-center text-dark font-monospace navbar-coords">
+      <div class="flex-grow-1 d-flex align-items-center justify-content-evenly justify-content-sm-end text-dark font-monospace navbar-coords">
         <!-- 現在地・画面中央の座標 -->
         <div class="border-start border-secondary-subtle ps-2 me-2">
-          <span class="text-primary">◯</span>
-          <span id="currentLat">---</span>, <span id="currentLng">---</span>,
-          <span id="currentElevation">---</span>m<br>
-          <span class="text-primary">＋</span>
-          <span id="mapCenterLat">---</span>, <span id="mapCenterLng">---</span>,
-          <span id="mapCenterElevation">---</span>m
+          <span class="text-primary">◯</span><span id="currentLat">---</span>,<span id="currentLng">---</span>,<span id="currentElevation">---</span>m<br>
+          <span class="text-primary">＋</span><span id="mapCenterLat">---</span>,<span id="mapCenterLng">---</span>,<span id="mapCenterElevation">---</span>m
         </div>
         <!-- 距離・標高差 -->
         <div class="border-start border-secondary-subtle ps-2">
-          ΔD: <span id="distance">---</span><br>
-          ΔH: <span id="elevationDifference">---</span>
-          (<span id="slopeDegree">---</span>)
+          ΔD:<span id="distance">---</span><br>
+          ΔH:<span id="elevationDifference">---</span>
+          <span id="slopeDegree">---</span>
         </div>
       </div>
 
@@ -78,6 +74,13 @@
     <i data-lucide="pencil-line" class="me-1"></i>ライン記録中
     <button id="line-undo-btn" class="vertex-delete-cancel-btn" title="最後の点を取り消す"><i data-lucide="undo-2"></i></button>
     <button id="line-finish-btn" class="line-finish-btn" title="ラインを完了する">完了</button>
+  </div>
+  <div id="line-mode-hint" style="display:none;">RECボタンを押すと、ラインが描画されます</div>
+
+  <!-- ライン開始点選択中インジケーター（ナビバー直下・中央） -->
+  <div id="pending-line-indicator" style="display:none;">
+    <i data-lucide="pencil-line" class="me-1"></i>開始POIをタップ
+    <button id="pending-line-cancel-btn" class="vertex-delete-cancel-btn" title="キャンセル"><i data-lucide="x"></i></button>
   </div>
 
   <!-- 分割モードインジケーター（ナビバー直下・中央） -->
@@ -159,6 +162,27 @@
           </div>
         </div>
 
+        <!-- 図形作成 -->
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed fw-bold" type="button"
+              data-bs-toggle="collapse" data-bs-target="#collapseShapeTool">
+              <i data-lucide="pencil-line" class="me-2"></i>図形作成
+            </button>
+          </h2>
+          <div id="collapseShapeTool" class="accordion-collapse collapse" data-bs-parent="#menuAccordion">
+            <div class="accordion-body d-grid gap-2">
+              <button class="btn btn-outline-primary btn-sm text-start w-100" id="sidebar-line-create-btn">
+                <i data-lucide="pencil-line" class="me-2"></i>ライン作成
+              </button>
+              <p class="small text-secondary mb-0 px-1">RECボタンで頂点を登録しながら、ラインを引きます</p>
+              <button class="btn btn-outline-secondary btn-sm text-start w-100" id="sidebar-polygonize-btn">
+                <i data-lucide="box-select" class="me-2"></i>全ラインをポリゴン化
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- データ一覧（POI・ライン） -->
         <div class="accordion-item">
           <h2 class="accordion-header">
@@ -178,6 +202,8 @@
                   <label class="btn btn-outline-secondary" for="labelModeNumber">番号</label>
                   <input type="radio" class="btn-check" name="labelMode" id="labelModeDesc" value="description">
                   <label class="btn btn-outline-secondary" for="labelModeDesc">属性</label>
+                  <input type="radio" class="btn-check" name="labelMode" id="labelModeDatetime" value="datetime">
+                  <label class="btn btn-outline-secondary" for="labelModeDatetime">日時</label>
                 </div>
                 <label class="d-flex align-items-center gap-1 mb-0 small" title="POI・ラインの色">
                   <i data-lucide="palette"></i>色
@@ -427,7 +453,7 @@
         <div class="modal-body d-grid gap-2">
           <button class="btn btn-outline-success text-start" data-share-format="kmz">
             <i data-lucide="archive" class="me-2"></i><strong>KMZ</strong>
-            <span class="badge bg-success ms-1">推奨</span>
+            <span class="text-muted small ms-1">（Google Earth用）</span>
             <div class="text-muted small">地点・ライン・ポリゴン＋写真</div>
           </button>
           <button class="btn btn-outline-secondary text-start" data-share-format="kml">

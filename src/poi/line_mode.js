@@ -120,6 +120,24 @@ export function startLineMode(map, poi) {
   _ctx.saveLines();
 }
 
+export function addVertexToLine(poi) {
+  if (!_ctx.lineMode.active) return;
+  const lastVertex = _ctx.lineMode.vertices.at(-1);
+  const isAlreadyLast = lastVertex?.type === 'poi' && lastVertex.poiId === poi.id;
+  if (isAlreadyLast) return;
+
+  _ctx.lineMode.polylineInstance.addLatLng(poi.latlng);
+  _ctx.lineMode.poiIds.push(poi.id);
+  _ctx.lineMode.vertices.push({ type: 'poi', poiId: poi.id });
+
+  const entry = _ctx.lineArray.find(l => l.id === _ctx.lineMode.lineId);
+  if (entry) {
+    entry.poiIds   = [..._ctx.lineMode.poiIds];
+    entry.vertices = [..._ctx.lineMode.vertices];
+  }
+  _ctx.saveLines();
+}
+
 export function endLineMode(map, poi) {
   if (!_ctx.lineMode.active) return;
 
@@ -187,6 +205,8 @@ export async function undoLastViaPoint() {
 export function updateLineModeUI() {
   const indicator = document.getElementById('line-mode-indicator');
   if (indicator) indicator.style.display = _ctx.lineMode.active ? 'inline-flex' : 'none';
+  const hint = document.getElementById('line-mode-hint');
+  if (hint) hint.style.display = _ctx.lineMode.active ? 'block' : 'none';
 }
 
 /** 全POIポップアップをlineModeに合わせて再生成し、データ一覧も更新 */

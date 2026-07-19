@@ -56,8 +56,10 @@ html, body {
    ナビバー
    ---------------------------------------------------------- */
 .navbar-coords {
-  font-size: 0.7rem;
+  /* 画面幅に比例して縮小し、収まる範囲で最大サイズを保つ（上限0.7rem） */
+  font-size: clamp(0.55rem, 3.2vw, 0.7rem);
   line-height: 1.2;
+  white-space: nowrap;
 }
 
 /* ----------------------------------------------------------
@@ -507,6 +509,41 @@ html, body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+/* ライン記録中ヒント */
+#line-mode-hint {
+  position: fixed;
+  top: 82px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1002;
+  padding: 3px 10px;
+  background: rgba(0, 73, 38, 0.75);
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ライン開始点選択中インジケーター */
+#pending-line-indicator {
+  position: fixed;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1002;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--color-forest);
+  color: white;
+  border-radius: 0 0 12px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 /* 分割モードインジケーター */

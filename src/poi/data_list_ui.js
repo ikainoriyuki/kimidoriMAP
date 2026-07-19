@@ -43,15 +43,6 @@ export function renderDataList(map, poiArray, lineArray, ops) {
   );
   container.innerHTML = '';
 
-  // --- 全ラインをポリゴン化ボタン（ライン2本以上のとき表示） ---
-  if (lineArray.length >= 1 && ops.polygonizeAllLines) {
-    const polyBtn = document.createElement('button');
-    polyBtn.className   = 'btn btn-sm btn-outline-secondary w-100 mb-2';
-    polyBtn.textContent = '全ラインをポリゴン化';
-    polyBtn.addEventListener('click', () => ops.polygonizeAllLines(lineArray));
-    container.appendChild(polyBtn);
-  }
-
   // --- グループ化 ---
   const groups = {};
 

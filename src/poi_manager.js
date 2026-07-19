@@ -22,7 +22,7 @@ import { getLineLatlngs, calcLineLength, formatLength } from './poi/distance_cal
 import {
   LINE_STYLE, initLineModeModule,
   createLinePopupContent, bindLinePopup,
-  startLineMode, endLineMode, undoLastViaPoint,
+  startLineMode, endLineMode, addVertexToLine, undoLastViaPoint,
   updateLineModeUI, refreshAllPopups, setLineStyleColor,
   isVertexEditActive,
 } from './poi/line_mode.js';
@@ -64,6 +64,13 @@ let lineMode = {
   poiIds:           [],
   vertices:         [],
 };
+
+let pendingLineModeStart = false;
+
+function updatePendingLineModeUI() {
+  const el = document.getElementById('pending-line-indicator');
+  if (el) el.style.display = pendingLineModeStart ? 'inline-flex' : 'none';
+}
 
 // ============================================================
 // サブモジュールへの状態プロキシ
@@ -390,6 +397,20 @@ export function initPOIManager(map, positioning) {
   });
   syncLabelUI();
 
+  document.getElementById('sidebar-line-create-btn')?.addEventListener('click', () => {
+    if (lineMode.active) return;
+    pendingLineModeStart = true;
+    updatePendingLineModeUI();
+    document.querySelector('#sidebarMenu .btn-close')?.click();
+  });
+  document.getElementById('pending-line-cancel-btn')?.addEventListener('click', () => {
+    pendingLineModeStart = false;
+    updatePendingLineModeUI();
+  });
+  document.getElementById('sidebar-polygonize-btn')?.addEventListener('click', () => {
+    dataListOps.polygonizeAllLines(lineArray);
+  });
+
   document.getElementById('collapseDataList')
     ?.addEventListener('shown.bs.collapse', () => renderDataList(map, poiArray, lineArray, dataListOps));
 }
@@ -534,8 +555,8 @@ function addMarker(map, poi, showPopup = false) {
       startLineMode(map, poi);
       marker.closePopup();
     });
-    document.getElementById('line-end-btn')?.addEventListener('click', () => {
-      endLineMode(map, poi);
+    document.getElementById('line-add-vertex-btn')?.addEventListener('click', () => {
+      addVertexToLine(poi);
       marker.closePopup();
     });
 
@@ -555,7 +576,16 @@ function addMarker(map, poi, showPopup = false) {
     }
   }
 
-  marker.on('popupopen', () => requestAnimationFrame(attachPopupListeners));
+  marker.on('popupopen', () => {
+    if (pendingLineModeStart) {
+      pendingLineModeStart = false;
+      marker.closePopup();
+      startLineMode(map, poi);
+      updatePendingLineModeUI();
+      return;
+    }
+    requestAnimationFrame(attachPopupListeners);
+  });
   marker.on('popupclose', () => {
     objectURLs.forEach(u => URL.revokeObjectURL(u));
     objectURLs.length = 0;
@@ -571,7 +601,7 @@ function createPopupContent(poi) {
   const time = poi.timestamp.toLocaleTimeString();
 
   const lineBtn = lineMode.active
-    ? `<button id="line-end-btn" class="line-end-button">ここでライン完了</button>`
+    ? `<button id="line-add-vertex-btn" class="line-end-button">頂点として追加</button>`
     : `<button id="line-start-btn" class="line-start-button">ライン開始</button>`;
 
   const photoHtml = poi.photoId
@@ -747,6 +777,7 @@ async function editPOI(poi, marker) {
   });
   marker.setPopupContent(createPopupContent(poi));
   if (marker.isPopupOpen()) marker.openPopup();
+  updatePOILabel(poi);
   await savePOIArray();
 }
 

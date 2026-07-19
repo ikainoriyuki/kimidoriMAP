@@ -26,9 +26,15 @@ export function updatePOILabel(poi) {
   }
   if (!_ctx.labelsVisible) return;
 
-  const text = _ctx.globalLabelMode === 'number'
-    ? `${poi.stake_type || ''}${poi.number ?? ''}`
-    : poi.description || '';
+  let text;
+  if (_ctx.globalLabelMode === 'number') {
+    text = `${poi.stake_type || ''}${poi.number ?? ''}`;
+  } else if (_ctx.globalLabelMode === 'datetime') {
+    const ts = poi.timestamp instanceof Date ? poi.timestamp : new Date(poi.timestamp);
+    text = isNaN(ts) ? '' : `${ts.toLocaleDateString('ja-JP')} ${ts.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`;
+  } else {
+    text = poi.description || '';
+  }
   if (!text.trim()) return;
 
   poi.labelTooltip = L.tooltip({
