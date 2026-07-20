@@ -25,6 +25,8 @@ export function initPositioning(map) {
   let mapCenterLocation  = null;
   let locationMarker     = null;
   let accuracyCircle     = null;
+  let headingMarker      = null;
+  let compassStarted     = false;
 
   // ============================================================
   // 距離の更新（lat/lng のみで計算、オフラインでも動作）
@@ -72,6 +74,67 @@ export function initPositioning(map) {
   }
 
   // ============================================================
+  // 方位インジケーター（コンパス三角形）
+  // ============================================================
+  function updateHeadingMarker(heading) {
+    if (!locationMarker) return;
+
+    if (!headingMarker) {
+      headingMarker = L.marker(locationMarker.getLatLng(), {
+        icon: L.divIcon({
+          className: 'heading-indicator-icon',
+          html: '<div class="heading-indicator__rotate"><div class="heading-indicator__arrow"></div></div>',
+          iconSize: [44, 44],
+          iconAnchor: [22, 22],
+        }),
+        interactive: false,
+        keyboard: false,
+        zIndexOffset: 1000,
+      }).addTo(map);
+    } else {
+      headingMarker.setLatLng(locationMarker.getLatLng());
+    }
+
+    const rotateEl = headingMarker.getElement()?.querySelector('.heading-indicator__rotate');
+    if (rotateEl) rotateEl.style.transform = `rotate(${heading}deg)`;
+  }
+
+  function handleDeviceOrientation(event) {
+    let heading;
+    if (typeof event.webkitCompassHeading === 'number') {
+      // iOS Safari：真のコンパス方位（0=北、時計回り）を直接提供
+      heading = event.webkitCompassHeading;
+    } else if (event.absolute && typeof event.alpha === 'number') {
+      // Android Chrome：alpha は反時計回りのため方位角に変換
+      heading = (360 - event.alpha) % 360;
+    } else {
+      return; // 信頼できる方位データが得られない
+    }
+    updateHeadingMarker(heading);
+  }
+
+  function startCompass() {
+    if (compassStarted) return;
+    compassStarted = true;
+    const eventName = 'ondeviceorientationabsolute' in window
+      ? 'deviceorientationabsolute'
+      : 'deviceorientation';
+    window.addEventListener(eventName, handleDeviceOrientation);
+  }
+
+  function requestCompassPermission() {
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      // iOS 13+：ユーザー操作の中で明示的に許可を求める必要がある
+      DeviceOrientationEvent.requestPermission()
+        .then(state => { if (state === 'granted') startCompass(); })
+        .catch(() => {});
+    } else {
+      startCompass();
+    }
+  }
+
+  // ============================================================
   // 現在地の座標更新（測位コールバック）
   // ============================================================
   function updateCurrentLocation(position) {
@@ -100,6 +163,8 @@ export function initPositioning(map) {
       locationMarker.setLatLng(latlng);
       accuracyCircle.setLatLng(latlng).setRadius(accuracy);
     }
+
+    if (headingMarker) headingMarker.setLatLng(latlng);
 
     updateDistance();
     updateElevation(lat, lng, el.currentElevation, elev => {
@@ -135,6 +200,7 @@ export function initPositioning(map) {
   map.on('moveend', updateMapCenter);
 
   el.locationBtn.addEventListener('click', () => {
+    requestCompassPermission(); // iOSはユーザー操作内でのみ許可ダイアログを出せる
     if (locationMarker) {
       const latlng = locationMarker.getLatLng();
       map.setView(latlng, Math.max(map.getZoom(), 16));
@@ -144,6 +210,7 @@ export function initPositioning(map) {
   });
 
   startWatchPosition();
+  requestCompassPermission(); // iOS以外は許可不要のためここで開始できる
 
   // ============================================================
   // POIManagerへの公開インターフェース
